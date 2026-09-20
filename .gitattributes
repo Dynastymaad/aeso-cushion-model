@@ -1,0 +1,13 @@
+# Let git normalise text, but never touch binaries. calibration.pkl is a
+# pickle: a CRLF rewrite would corrupt it in a way nothing notices until it
+# fails to load.
+* text=auto
+
+*.pkl  binary
+*.zip  binary
+*.png  binary
+*.xlsx binary
+
+# Keep shell-ish files LF so they stay runnable if this is ever cloned on Linux
+*.sql  text eol=lf
+*.py   text eol=lf

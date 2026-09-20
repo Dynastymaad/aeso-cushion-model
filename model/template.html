@@ -1,0 +1,1273 @@
+<meta charset="utf-8">
+<title>Alberta Cushion Scenarios</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700&display=swap">
+<style>
+:root{
+  --bg:#f1f4f7; --surface:#ffffff; --surface-2:#e7ecf1; --surface-3:#dde4ea;
+  --line:#ccd5de; --line-2:#b6c2ce;
+  --ink:#101820; --ink-2:#48586a; --ink-3:#78889a;
+  --accent:#a8570d;
+  --s-base:#2a78d6; --s-scen:#eb6834;
+  --v-pos:#2a78d6; --v-neg:#c0322a;   /* attribution poles, validated light */
+  --ok:#16785a; --ok-bg:#dff0e8;
+  --watch:#9a6300; --watch-bg:#f8ecd2;
+  --tight:#c0322a; --tight-bg:#fadedb;
+  --beyond:#5b4bb0; --beyond-bg:#e6e2f7;
+  --shadow:0 1px 2px rgba(16,24,32,.06),0 8px 24px -12px rgba(16,24,32,.18);
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --bg:#0e1319; --surface:#171e26; --surface-2:#1f2831; --surface-3:#28323d;
+  --line:#2f3b47; --line-2:#3e4c5a;
+  --ink:#eef3f8; --ink-2:#aebbc8; --ink-3:#7a8796;
+  --accent:#e09a4e; --s-base:#3987e5; --s-scen:#e8763f;
+  --v-pos:#3987e5; --v-neg:#e66767;   /* stepped for the dark surface */
+  --ok:#54c69b; --ok-bg:#12312a;
+  --watch:#e0ad4a; --watch-bg:#33280f;
+  --tight:#f07f75; --tight-bg:#3a1d1a;
+  --beyond:#a89ae8; --beyond-bg:#241f3d;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.7);
+}}
+:root[data-theme="dark"]{
+  --bg:#0e1319; --surface:#171e26; --surface-2:#1f2831; --surface-3:#28323d;
+  --line:#2f3b47; --line-2:#3e4c5a;
+  --ink:#eef3f8; --ink-2:#aebbc8; --ink-3:#7a8796;
+  --accent:#e09a4e; --s-base:#3987e5; --s-scen:#e8763f;
+  --v-pos:#3987e5; --v-neg:#e66767;   /* stepped for the dark surface */
+  --ok:#54c69b; --ok-bg:#12312a;
+  --watch:#e0ad4a; --watch-bg:#33280f;
+  --tight:#f07f75; --tight-bg:#3a1d1a;
+  --beyond:#a89ae8; --beyond-bg:#241f3d;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.7);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,sans-serif;
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.num{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-variant-numeric:tabular-nums}
+h1,h2,h3{font-family:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
+  margin:0;text-wrap:balance;letter-spacing:-.005em}
+.eyebrow{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:40;
+  background:color-mix(in srgb,var(--surface) 92%,transparent);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.hwrap{max-width:1560px;margin:0 auto;padding:12px 20px}
+.hrow{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:baseline}
+h1{font-size:19px;font-weight:700}
+.vintage{font-size:11.5px;color:var(--ink-3)}
+.daybar{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.viewbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:11px}
+.vtab{appearance:none;border:1px solid var(--line-2);background:var(--surface-2);color:var(--ink-2);
+  border-radius:7px;padding:6px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.vtab:hover{border-color:var(--ink-3)}
+.vtab[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.vtab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.vhint{font-size:11.5px;color:var(--ink-3);margin-left:4px}
+body.fundmode .pxcol{display:none}
+body.fundmode #tiles,
+body.fundmode .panel:has(#anaBody),
+body.fundmode .panel:has(#c_crv),
+body.fundmode .panel:has(#c_price),
+body.fundmode .panel:has(#c_prob),
+body.fundmode .panel.notes{display:none}
+body.fundmode table{min-width:560px}
+body:not(.fundmode) #fundPanel{display:none!important}
+.fg{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;padding:14px 16px}
+.fc{border:1px solid var(--line);border-radius:9px;padding:11px 12px 8px;background:var(--surface-2)}
+.fc h4{margin:0;font-size:14px;font-weight:700;font-family:"IBM Plex Sans Condensed",sans-serif}
+.fc .sub2{font-size:11px;color:var(--ink-3);margin:1px 0 6px}
+.fc .hl{font-size:12.5px;color:var(--ink-2);margin-top:5px}
+.fc .hl b{color:var(--ink);font-weight:600}
+.chip{appearance:none;border:1px solid var(--line-2);background:var(--surface-2);color:var(--ink-2);
+  border-radius:999px;padding:5px 13px;font:inherit;font-size:12.5px;font-weight:500;cursor:pointer}
+.chip:hover{border-color:var(--ink-3)}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+main{max-width:1560px;margin:0 auto;padding-block:20px 56px;padding-left:20px;padding-right:20px;
+  display:grid;grid-template-columns:284px minmax(0,1fr);gap:22px;align-items:start}
+@media (max-width:1100px){ main{grid-template-columns:minmax(0,1fr)} }
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow)}
+.phead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  padding:13px 16px 11px;border-bottom:1px solid var(--line)}
+.phead h2{font-size:14.5px;font-weight:700}
+.phead .sub{font-size:11.5px;color:var(--ink-3)}
+
+.rail{position:sticky;top:calc(env(safe-area-inset-top,0px) + 96px)}
+@media (max-width:1100px){ .rail{position:static} }
+.grp{border-top:1px solid var(--line);padding:13px 16px}
+.grp:first-of-type{border-top:0}
+.grp > .eyebrow{display:block;margin-bottom:9px}
+.ctl{margin-bottom:11px}
+.ctl:last-child{margin-bottom:0}
+.clab{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:3px}
+.clab span:first-child{font-size:12.5px;color:var(--ink-2)}
+.cval{font-size:12.5px;font-weight:600}
+.cval.pos{color:var(--ok)} .cval.neg{color:var(--tight)}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:20px;background:transparent;cursor:pointer;margin:0;display:block}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:var(--surface-3)}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:var(--surface-3)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+  background:var(--s-scen);border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line-2);margin-top:-5.5px}
+input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:var(--s-scen);
+  border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line-2)}
+input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+select{width:100%;font:inherit;font-size:12.5px;padding:6px 8px;border:1px solid var(--line-2);
+  border-radius:6px;background:var(--surface-2);color:var(--ink)}
+select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.btn{appearance:none;width:100%;border:1px solid var(--line-2);background:var(--surface-2);color:var(--ink);
+  border-radius:7px;padding:8px 12px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+.btn:hover{background:var(--surface-3)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.presets{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.presets .btn{font-size:11.5px;padding:7px 6px;font-weight:500}
+
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+@media (max-width:860px){ .tiles{grid-template-columns:repeat(2,minmax(0,1fr))} }
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:13px 15px 14px;box-shadow:var(--shadow)}
+.tile .eyebrow{display:block;margin-bottom:7px}
+.big{font-size:27px;font-weight:600;line-height:1.05;letter-spacing:-.02em}
+.tile .foot{font-size:11.5px;color:var(--ink-3);margin-top:5px}
+.delta{font-weight:600}
+.delta.up{color:var(--tight)} .delta.dn{color:var(--ok)}
+
+.tscroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:1080px;font-size:11.5px}
+thead th{position:sticky;top:0;background:var(--surface-2);z-index:2;
+  font-size:9px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);
+  text-align:right;padding:7px 5px;border-bottom:1px solid var(--line-2);white-space:nowrap}
+thead th.l{text-align:left}
+thead th.grp-s,tbody td.grp-s{border-left:1px solid var(--line-2)}
+tbody td{text-align:right;padding:5px 5px;border-bottom:1px solid var(--line);white-space:nowrap}
+tbody td.l{text-align:left}
+tbody tr:hover td{background:var(--surface-2)}
+td.dim{color:var(--ink-3)}
+td.strong{font-weight:600}
+.pill{display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600}
+.p-ok{background:var(--ok-bg);color:var(--ok)}
+.p-watch{background:var(--watch-bg);color:var(--watch)}
+.p-tight{background:var(--tight-bg);color:var(--tight)}
+.stripe{display:inline-block;width:3px;height:13px;border-radius:2px;vertical-align:-2px;margin-right:6px}
+.moved{color:var(--s-scen);font-weight:600}
+.pk{font-weight:600}
+.pk-hi{color:var(--tight)} .pk-md{color:var(--watch)} .pk-lo{color:var(--ink-3)}
+
+.charts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;margin-top:18px}
+@media (max-width:1100px){ .charts{grid-template-columns:minmax(0,1fr)} }
+.wide{grid-column:1/-1}
+svg{display:block;width:100%;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;padding:0 16px 14px;font-size:11.5px;color:var(--ink-2)}
+.legend i{display:inline-block;width:11px;height:3px;border-radius:2px;vertical-align:3px;margin-right:6px}
+.legend i.band{width:11px;height:10px;border-radius:2px;vertical-align:-1px}
+.legend i.dot{width:9px;height:9px;border-radius:50%;vertical-align:0}
+
+.notes{margin-top:18px}
+.notes .body{padding:16px 18px 18px}
+.notes p{margin:0 0 11px;max-width:76ch;color:var(--ink-2);font-size:13px}
+.notes p:last-child{margin-bottom:0}
+.notes strong{color:var(--ink);font-weight:600}
+.notes h3{font-size:13.5px;margin:18px 0 7px;color:var(--ink)}
+.notes h3:first-child{margin-top:0}
+.notes code{font-family:"IBM Plex Mono",monospace;font-size:12px;background:var(--surface-2);
+  padding:1px 5px;border-radius:4px;border:1px solid var(--line)}
+.mini{width:100%;min-width:0;border-collapse:collapse;font-size:12px;margin:10px 0 14px;max-width:560px}
+.mini th{text-align:right;padding:5px 9px;border-bottom:1px solid var(--line-2);font-size:9.5px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.mini th.l,.mini td.l{text-align:left}
+.mini td{text-align:right;padding:5px 9px;border-bottom:1px solid var(--line);color:var(--ink-2)}
+.warn{border-left:3px solid var(--accent);padding-left:13px}
+.ftabs{display:flex;flex-wrap:wrap;gap:6px}
+.ftab{appearance:none;border:1px solid var(--line-2);background:var(--surface-2);color:var(--ink-2);
+  border-radius:7px;padding:6px 12px;font:inherit;font-size:12.5px;font-weight:500;cursor:pointer}
+.ftab:hover{border-color:var(--ink-3)}
+.ftab[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.ftab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.fnote{font-size:12.5px;color:var(--ink-2);max-width:78ch;margin:12px 0 0}
+.fnote strong{color:var(--ink);font-weight:600}
+.btab{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px}
+.btab th{text-align:right;padding:6px 8px;border-bottom:1px solid var(--line-2);font-size:9.5px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;white-space:nowrap}
+.btab th.l,.btab td.l{text-align:left}
+.btab td{text-align:right;padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.btab tr.here td{background:var(--watch-bg)}
+.btab td.neg{color:var(--tight)} .btab td.pos{color:var(--ok)}
+.whybar{display:flex;flex-wrap:wrap;gap:6px;padding:12px 16px 0}
+.hchip{appearance:none;border:1px solid var(--line-2);background:var(--surface-2);color:var(--ink-2);
+  border-radius:6px;padding:4px 9px;font:inherit;font-size:11.5px;font-weight:500;cursor:pointer;
+  font-family:"IBM Plex Mono",monospace}
+.hchip:hover{border-color:var(--ink-3)}
+.hchip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.hchip.t{border-color:var(--tight);color:var(--tight)}
+.hchip.t[aria-pressed="true"]{background:var(--tight);border-color:var(--tight);color:#fff}
+.hchip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.verdict{padding:2px 16px 16px;font-size:13px;color:var(--ink-2);max-width:78ch}
+.verdict strong{color:var(--ink);font-weight:600}
+.verdict .lede{font-size:14px;color:var(--ink);margin-bottom:8px}
+.sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;
+  padding:0 16px 14px}
+.sumc{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+.sumc .eyebrow{display:block;margin-bottom:4px}
+.sumc .v{font-size:17px;font-weight:600;letter-spacing:-.01em}
+.ana{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px}
+.anac{border:1px solid var(--line);border-radius:9px;padding:12px 13px;background:var(--surface-2)}
+.anac h4{margin:0 0 2px;font-size:15px;font-weight:700;font-family:"IBM Plex Sans Condensed",sans-serif}
+.anac .when{font-size:11px;color:var(--ink-3);margin-bottom:9px}
+.anac .kv{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-2);padding:2px 0}
+.anac .kv b{color:var(--ink);font-weight:600}
+.anac .spark{margin:9px 0 6px}
+.anac .out{border-top:1px solid var(--line);margin-top:8px;padding-top:8px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<header>
+  <div class="hwrap">
+    <div class="hrow">
+      <h1>Alberta Cushion Scenarios</h1>
+      <span class="vintage" id="vintage"></span>
+    </div>
+    <div class="viewbar" role="group" aria-label="Choose a view">
+      <button class="vtab" data-view="fund" type="button">Fundamentals first</button>
+      <button class="vtab" data-view="read" type="button">Full read</button>
+      <span class="vhint" id="vhint"></span>
+    </div>
+    <div class="daybar" id="daybar" role="group" aria-label="Select day"></div>
+  </div>
+</header>
+
+<main>
+  <div class="panel rail">
+    <div class="phead"><h2>Assumptions</h2><span class="sub">vs. filed</span></div>
+    <div class="grp">
+      <span class="eyebrow">Demand</span>
+      <div class="ctl"><div class="clab"><span>Alberta internal load</span><span class="cval num" id="v_load">0 MW</span></div>
+        <input type="range" id="s_load" min="-1500" max="1500" step="25" value="0" aria-label="Load shift"></div>
+    </div>
+    <div class="grp">
+      <span class="eyebrow">Renewables</span>
+      <div class="ctl"><div class="clab"><span>Wind</span><span class="cval num" id="v_wind">0%</span></div>
+        <input type="range" id="s_wind" min="-100" max="100" step="5" value="0" aria-label="Wind shift"></div>
+      <div class="ctl"><div class="clab"><span>Solar</span><span class="cval num" id="v_solar">0%</span></div>
+        <input type="range" id="s_solar" min="-100" max="100" step="5" value="0" aria-label="Solar shift"></div>
+    </div>
+    <div class="grp">
+      <span class="eyebrow">Gas availability</span>
+      <div class="ctl"><div class="clab"><span>Combined cycle</span><span class="cval num" id="v_cc">0 MW</span></div>
+        <input type="range" id="s_cc" min="-1500" max="500" step="25" value="0" aria-label="Combined cycle shift"></div>
+      <div class="ctl"><div class="clab"><span>Cogeneration</span><span class="cval num" id="v_cog">0 MW</span></div>
+        <input type="range" id="s_cog" min="-1500" max="500" step="25" value="0" aria-label="Cogen shift"></div>
+      <div class="ctl"><div class="clab"><span>Simple cycle</span><span class="cval num" id="v_sc">0 MW</span></div>
+        <input type="range" id="s_sc" min="-700" max="300" step="25" value="0" aria-label="Simple cycle shift"></div>
+      <div class="ctl"><div class="clab"><span>Gas-fired steam</span><span class="cval num" id="v_gfs">0 MW</span></div>
+        <input type="range" id="s_gfs" min="-1800" max="300" step="25" value="0" aria-label="Gas steam shift"></div>
+    </div>
+    <div class="grp">
+      <span class="eyebrow">Interties</span>
+      <div class="ctl"><div class="clab"><span>Net import shift</span><span class="cval num" id="v_it">0 MW</span></div>
+        <input type="range" id="s_it" min="-1000" max="1000" step="25" value="0" aria-label="Intertie shift"></div>
+      <div class="ctl"><label class="clab" for="m_it"><span>Source</span></label>
+        <select id="m_it">
+          <option value="filed">Modelled response (default)</option>
+          <option value="endo">Solve from tightness</option>
+          <option value="none">No import response — 0 MW</option>
+          <option value="p10">Neighbours don't show (worst tenth)</option>
+        </select></div>
+    </div>
+    <div class="grp">
+      <span class="eyebrow">Presets</span>
+      <div class="presets">
+        <button class="btn" data-preset="reset" type="button">Reset</button>
+        <button class="btn" data-preset="cctrip" type="button">CC unit trip</button>
+        <button class="btn" data-preset="calm" type="button">Wind collapse</button>
+        <button class="btn" data-preset="heat" type="button">Heat event</button>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel" id="fundPanel" style="margin-bottom:18px">
+      <div class="phead">
+        <h2>The drivers, before any price</h2>
+        <span class="sub" id="fundSub"></span>
+      </div>
+      <div class="fg" id="fundGrid"></div>
+      <div class="verdict" id="fundText"></div>
+    </div>
+
+    <div class="tiles" id="tiles"></div>
+
+    <div class="panel">
+      <div class="phead"><h2 id="tabTitle">Hourly read</h2><span class="sub" id="tabSub"></span></div>
+      <div id="partWarn" style="padding:12px 16px 0"></div>
+      <div class="tscroll">
+        <table>
+          <thead><tr>
+            <th class="l">HE</th>
+            <th>Load</th><th>Cogen</th><th>Comb<br>cycle</th><th>Gas<br>steam</th><th>Simple<br>cycle</th><th>Wind</th><th>Solar</th><th>ITC</th><th class="grp-s">MW before<br>simple cycle</th>
+            <th class="grp-s">Cushion</th><th>Δ</th>
+            <th class="grp-s pxcol">P25</th><th class="pxcol">Likely<br>P50</th><th class="pxcol">P75</th><th class="pxcol">P90</th><th class="grp-s pxcol">Fair value<br>EV</th>
+            <th class="grp-s pxcol">&gt;$50</th><th class="pxcol">&gt;$100</th><th class="pxcol">&gt;$300</th>
+            <th class="l grp-s">State</th><th class="pxcol">Settled</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:18px">
+      <div class="phead">
+        <h2>Why this hour is where it is</h2>
+        <span class="sub" id="whySub"></span>
+      </div>
+      <div class="whybar" id="whyChips" role="group" aria-label="Choose an hour"></div>
+      <div id="c_why"></div>
+      <div class="sum" id="whySum"></div>
+      <div class="verdict" id="whyText"></div>
+    </div>
+
+    <div class="panel" style="margin-top:18px">
+      <div class="phead">
+        <h2>Days that looked like this one</h2>
+        <span class="sub" id="anaSub"></span>
+      </div>
+      <div id="anaBody" style="padding:14px 16px 4px"></div>
+      <div class="verdict" id="anaText"></div>
+    </div>
+
+    <div class="panel" style="margin-top:18px">
+      <div class="phead">
+        <h2>Supply remaining vs. price</h2>
+        <span class="sub" id="crvSub"></span>
+      </div>
+      <div id="c_crv"></div>
+      <div class="legend">
+        <span><i style="background:var(--ink)"></i>P50 — the middle outcome</span>
+        <span><i style="background:var(--s-base);height:0;border-top:2px dashed var(--s-base)"></i>Expected value</span>
+        <span><i class="band" style="background:var(--s-scen);opacity:.22"></i>P25–P90</span>
+        <span><i class="dot" style="background:var(--s-scen)"></i>This hour</span>
+        <span><i class="dot" style="background:var(--ink-3)"></i>Other hours today, on the curve</span>
+        <span><i class="dot" style="background:var(--ok)"></i>Already settled</span>
+      </div>
+      <div class="sum" id="crvSum"></div>
+      <div class="verdict" id="crvText"></div>
+    </div>
+
+    <div class="charts">
+      <div class="panel wide">
+        <div class="phead"><h2>Supply cushion through the day</h2><span class="sub">MW above net demand</span></div>
+        <div id="c_cush"></div>
+        <div class="legend">
+          <span><i style="background:var(--s-base)"></i>Filed</span>
+          <span><i style="background:var(--s-scen)"></i>Scenario</span>
+          <span><i class="band" style="background:var(--tight-bg);border:1px solid var(--tight)"></i>Tight band (&lt;600 MW)</span>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="phead"><h2>Price, with its spread</h2><span class="sub">$/MWh</span></div>
+        <div id="c_price"></div>
+        <div class="legend">
+          <span><i style="background:var(--s-scen)"></i>P50 — the middle outcome</span>
+          <span><i class="band" style="background:var(--s-scen);opacity:.28"></i>P25–P75</span>
+          <span><i class="band" style="background:var(--s-scen);opacity:.13"></i>P10–P90</span>
+          <span><i class="dot" style="background:var(--ink)"></i>Settled</span>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="phead"><h2>Chance of a spike</h2><span class="sub">by hour</span></div>
+        <div id="c_prob"></div>
+        <div class="legend">
+          <span><i style="background:var(--tight)"></i>P(&gt;$100)</span>
+          <span><i style="background:var(--watch)"></i>P(&gt;$300)</span>
+          <span><i style="background:var(--s-base);opacity:.6"></i>filed P(&gt;$100)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:18px">
+      <div class="phead">
+        <h2>How wrong could each input be?</h2>
+        <span class="sub" id="fSub">measured day-ahead error, not an assumption</span>
+      </div>
+      <div style="padding:13px 16px 0"><div class="ftabs" id="ftabs" role="group" aria-label="Choose a fundamental"></div></div>
+      <div id="fBody" style="padding:4px 16px 16px"></div>
+    </div>
+
+    <div class="panel notes">
+      <div class="phead"><h2>What the numbers mean, and how accurate they are</h2></div>
+      <div class="body">
+        <h3>Reading a row</h3>
+        <p><strong>P50</strong> is the middle outcome — as likely to settle above as below. It replaces the old "Likely", which was an average and therefore sat well above the typical hour on anything tight. <strong>P25 to P75</strong> is the middle half of outcomes. <strong>P90</strong> is the level exceeded one hour in ten. The three probability columns are the chance the hour settles above $50, $100 and $300.</p>
+        <p><strong>P50 vs fair value (EV).</strong> P50 is the middle outcome — the better guess at what you
+        will actually see. Fair value is the average outcome, which is the right number to price a contract
+        off, because that is what it pays over many repetitions. On a quiet hour they sit within a few
+        dollars. On a tight hour fair value can be double or triple P50, and <em>that gap is the option
+        value in the hour</em> — most likely it is a P50 hour, but you are carrying something that
+        occasionally prints $900.</p>
+        <p>On a tight hour the band is wide on purpose. If P25 reads $54 and P90 reads $994, that is the honest statement: this hour could be anything. Narrow bands on tight hours would be a lie.</p>
+
+        <h3>How accurate they are</h3>
+        <p>Every figure in this section is <strong>re-measured on each refresh</strong>, so it describes the model you are reading now rather than the one that shipped. <span id="accHead"></span> Every hour's forecast used the wind, solar and load forecasts that were actually published the day before — never the outturn.</p>
+        <table class="mini">
+          <thead><tr><th class="l">When the model said…</th><th>hours</th><th>it said</th><th>it happened</th></tr></thead>
+          <tbody id="accRel"></tbody>
+        </table>
+        <p id="accRead"></p>
+        <p id="accRank"></p>
+        <p id="accCov"></p>
+
+        <h3>What the model still doesn't know</h3>
+        <p class="warn">Wind, solar and load are all properly forecast. <strong>Gas availability and intertie flows still use the values that actually occurred</strong>, because no forecast archive exists for them. Together they are worth about 90 MW of cushion error against the 357 MW the model already carries, so the effect is small — but the real-world numbers will be slightly worse than the backtest.</p>
+        <p>Gas availability itself is <strong>pulled from AESO, not calculated</strong>. AESO publishes max capacity, mothballed capacity and outages by fuel type for the next 15 days, and available capacity is their subtraction, not ours. It reflects <em>filed</em> outage plans — so it is accurate about planned work and blind to a unit tripping. That is why availability barely moves hour to hour and why an unexpected trip is the scenario worth stress-testing with the sliders.</p>
+        <p>The $700 band is computed but not shown. It rests on 37 events in the test window — enough to suggest a number, not enough to stand behind one.</p>
+
+        <h3>How it is built</h3>
+        <p>Price comes from a curve fitted to the last seven days, because the relationship between spare capacity and price drifts constantly — the same 1,000 MW cushion meant a 34% chance of a spike in one quarter and 1% in another. The <em>spread</em> around that curve comes from a year of history, since a tail probability needs far more data than an average does. Both are split by time of day: the same cushion is meaningfully more dangerous in the evening, when solar falls away while load is still climbing.</p>
+        <p>Because tomorrow's cushion is itself uncertain by about 357 MW, the model does not read one point off the curve. It considers the whole range of cushions the forecast might really mean and blends the answers. That is what makes the bands honest rather than falsely precise.</p>
+
+        <h3>What changed on 18 September</h3>
+        <p>Refreshing on the 17 September event exposed two defects and one fragility. All three are fixed, and the accuracy figures above are measured on the fixed model.</p>
+        <p><strong>The probability ladder could invert.</strong> The recalibration step was clipping flat once a reading ran past anything it had been trained on, and the three thresholds clipped at different heights — so on the most extreme hours the model could state a higher chance of clearing $300 than of clearing $100. It did that on 43% of scored hours, mildly on most of them. Thresholds are now forced into order and the recalibration extends rather than clips.</p>
+        <p><strong>The model could state certainty it had not earned.</strong> The top of the recalibration curve rested on six training hours that all spiked, which is how a 100% came out of it. Thin bands are now merged until each holds at least twenty hours, each band is read as (hits + ½) ⁄ (n + 1), and nothing is ever stated above 95%. As a result the ladder has visible plateaus at the top — that is the evidence running out, shown rather than hidden.</p>
+        <p><strong>The level curve is now trimmed.</strong> A seven-day window holds about eight hours in each cushion band, so one $716 hour was moving the whole tight end of the curve. The single highest hour in each band is trimmed before averaging. The tail did not go anywhere — it lives in the year of residual history, which is where there is enough data to shape it. Measured across 5,289 hours this cut the error by $0.91 an hour and halved the model's tendency to run hot after a spike week.</p>
+        <p class="warn">That tendency is real and worth knowing: in a week whose previous seven days held three or more hours above $300, the model's expected value still runs about <strong>$3.60 an hour high</strong>. In a quiet week it is within $0.62. Fade the model slightly in the week after a spike.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+const D = __DATA__;
+const GN=['overnight','morning','midday','evening','late'];
+const tgroup=he => he<=6?0 : he<=10?1 : he<=16?2 : he<=21?3 : 4;
+
+/* grid lookup: linear in cushion within a time group */
+const G={};
+for(const r of D.grid){ (G[r.g] ||= []).push(r); }
+for(const k in G) G[k].sort((a,b)=>a.c-b.c);
+const KEYS=['q10','q25','q50','q75','q90','q95','mean','p50','p100','p300','p700'];
+function look(cush,g){
+  const a=G[g]; const n=a.length;
+  if(cush<=a[0].c) return a[0];
+  if(cush>=a[n-1].c) return a[n-1];
+  let i=1; while(i<n && a[i].c<cush) i++;
+  const lo=a[i-1], hi=a[i], t=(cush-lo.c)/(hi.c-lo.c), out={};
+  for(const k of KEYS) out[k]=lo[k]+t*(hi[k]-lo[k]);
+  return out;
+}
+const itb=D.itbands.filter(b=>b.cushion!=null&&b.med!=null).sort((a,b)=>a.cushion-b.cushion);
+const IP=itb.map(b=>[b.cushion,b.med]);
+const IPW=(D.itp10&&D.itp10.length)?D.itp10:IP;   // measured P10 of net imports by tightness
+function interp(pts,x){
+  if(x<=pts[0][0]){const m=(pts[1][1]-pts[0][1])/(pts[1][0]-pts[0][0]);return pts[0][1]+m*(x-pts[0][0]);}
+  const n=pts.length;
+  if(x>=pts[n-1][0]){const m=(pts[n-1][1]-pts[n-2][1])/(pts[n-1][0]-pts[n-2][0]);return pts[n-1][1]+m*(x-pts[n-1][0]);}
+  for(let i=1;i<n;i++) if(x<=pts[i][0]){const t=(x-pts[i-1][0])/(pts[i][0]-pts[i-1][0]);return pts[i-1][1]+t*(pts[i][1]-pts[i-1][1]);}
+  return pts[n-1][1];
+}
+
+let view='fund';         // start on the drivers, so the price is not the first thing seen
+let whyHE=null;          // null = follow the tightest hour of the day
+const S={load:0,wind:0,solar:0,cc:0,cog:0,sc:0,gfs:0,it:0,itMode:'filed'};
+const ZERO={load:0,wind:0,solar:0,cc:0,cog:0,sc:0,gfs:0,it:0,itMode:'filed'};
+
+function compute(h,s){
+  const cc=Math.max(0,h.cc+s.cc), sc=Math.max(0,h.sc+s.sc);
+  const cog=Math.max(0,h.cogen+s.cog), gfs=Math.max(0,h.gfs+s.gfs);
+  const gas=cc+sc+cog+gfs;
+  const wind=Math.max(0,h.wind*(1+s.wind/100));
+  const solar=Math.max(0,h.solar*(1+s.solar/100));
+  const load=Math.max(0,h.load+s.load);
+  const internal=gas+(h.bio||0)+wind+solar;
+  const preIT=internal-load;
+  let it;
+  if(s.itMode==='endo')      it=interp(IP,preIT);
+  else if(s.itMode==='none') it=0;                       // strip the assumption entirely
+  else if(s.itMode==='p10')  it=interp(IPW,preIT);       // measured worst tenth for this tightness
+  else                       it=(h.bcmatl||0)+(h.sask||0);
+  it+=s.it;
+  const cushion=internal-(load-it);
+  const g=tgroup(h.he);
+  // how far into the gas ladder this hour has to reach. Gas runs cheapest
+  // first: cogeneration, then combined cycle, then gas-fired steam, then the
+  // simple-cycle peakers. Everything the peakers are not needed for is cheap.
+  const hydstor=h.hydstor||0;
+  const need=load-wind-solar-it-hydstor-(h.bio||0);
+  const r1=cog, r2=r1+cc, r3=r2+gfs, r4=r3+sc;
+  const headroom=r3-need;
+  const rung = need<=r1?1 : need<=r2?2 : need<=r3?3 : need<=r4?4 : 5;
+  return {load,gas,cc,cog,cogen:cog,sc,gfs,wind,solar,it,internal,cushion,g,
+          need,r1,r2,r3,r4,headroom,rung,hydstor,...look(cushion,g)};
+}
+
+const days=[...new Set(D.hours.map(h=>h.dt.slice(0,10)))]
+  .filter(d=>D.hours.filter(h=>h.dt.slice(0,10)===d).length>=12);
+let day=days.find(d=>D.hours.some(h=>h.dt.slice(0,10)===d&&h.status==='FORECAST'))||days[days.length-1];
+
+const fmtDay=d=>new Date(d+'T12:00:00').toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric'});
+const mw=v=>v==null?'—':Math.round(v).toLocaleString('en-CA');
+const usd=v=>v==null?'—':(v>=100?'$'+Math.round(v).toLocaleString('en-CA'):'$'+v.toFixed(2));
+const sgn=v=>(v>0?'+':'')+Math.round(v).toLocaleString('en-CA');
+const pctf=v=>v==null?'—':(v<0.005?'<1%':(100*v).toFixed(0)+'%');
+const pcls=v=>v>=0.25?'pk pk-hi':v>=0.08?'pk pk-md':'pk pk-lo';
+function state(c){ return c<600?['p-tight','Tight','var(--tight)']:c<1050?['p-watch','Watch','var(--watch)']:['p-ok','Comfortable','var(--ok)']; }
+const $=id=>document.getElementById(id);
+const rowsFor=d=>D.hours.filter(h=>h.dt.slice(0,10)===d).sort((a,b)=>a.he-b.he)
+  .map(h=>({h,base:compute(h,ZERO),scen:compute(h,S)}));
+
+function render(){
+  const rows=rowsFor(day);
+  const dirty=S.load||S.wind||S.solar||S.cc||S.cog||S.sc||S.gfs||S.it||S.itMode!=='filed';
+  const bAvg=rows.reduce((a,r)=>a+r.base.q50,0)/rows.length;
+  const sAvg=rows.reduce((a,r)=>a+r.scen.q50,0)/rows.length;
+  const sEV =rows.reduce((a,r)=>a+r.scen.mean,0)/rows.length;
+  const dP=sAvg-bAvg;
+  const minRow=rows.reduce((a,r)=>r.scen.cushion<a.scen.cushion?r:a,rows[0]);
+  const riskRow=rows.reduce((a,r)=>r.scen.p100>a.scen.p100?r:a,rows[0]);
+  const nRisk=rows.filter(r=>r.scen.p100>=0.20).length;
+  const nRiskB=rows.filter(r=>r.base.p100>=0.20).length;
+  const expSpike=rows.reduce((a,r)=>a+r.scen.p100,0);
+  const expSpikeB=rows.reduce((a,r)=>a+r.base.p100,0);
+  const part=rows.length<24, hrs=rows.map(r=>r.h.he);
+  const missEve=part&&!hrs.some(h=>h>=17&&h<=21);
+
+  $('tiles').innerHTML=`
+    <div class="tile"><span class="eyebrow">${part?`Average of ${rows.length} hrs`:'Day average'}</span>
+      <div class="big num">${usd(sAvg)}<span style="font-size:13px;color:var(--ink-3);font-weight:400"> P50</span></div>
+      <div class="big num" style="font-size:19px;margin-top:2px">${usd(sEV)}<span style="font-size:13px;color:var(--ink-3);font-weight:400"> fair value</span></div>
+      <div class="foot">${part?`<span style="color:var(--watch)">part day — HE${Math.min(...hrs)}–${Math.max(...hrs)} only</span>`
+        :(dirty?`filed ${usd(bAvg)} · <span class="delta ${dP>=0?'up':'dn'}">${dP>=0?'+':'−'}${usd(Math.abs(dP)).replace('$','$')}</span>`:'no shocks applied')}</div></div>
+    <div class="tile"><span class="eyebrow">Riskiest hour</span>
+      <div class="big num">${pctf(riskRow.scen.p100)}</div>
+      <div class="foot">HE ${riskRow.h.he} · chance above $100${dirty?` · filed ${pctf(riskRow.base.p100)}`:''}</div></div>
+    <div class="tile"><span class="eyebrow">Tightest hour</span>
+      <div class="big num">${mw(minRow.scen.cushion)}<span style="font-size:14px;color:var(--ink-3)"> MW</span></div>
+      <div class="foot">HE ${minRow.h.he} · P50 ${usd(minRow.scen.q50)}</div></div>
+    <div class="tile"><span class="eyebrow">Hours above $100 expected</span>
+      <div class="big num">${expSpike.toFixed(1)}<span style="font-size:14px;color:var(--ink-3)"> of ${rows.length}</span></div>
+      <div class="foot">${nRisk} hour${nRisk===1?'':'s'} at 20%+ risk${dirty?` · filed ${expSpikeB.toFixed(1)}`:''}</div></div>`;
+
+  $('tabTitle').textContent=`Hourly read — ${fmtDay(day)}`;
+  $('tabSub').textContent=(part?`${rows.length} of 24 hours published · `:'')
+    + (rows[0].h.status==='FORECAST'?'forecast hours'
+      :(rows.every(r=>r.h.status==='ACTUAL')?'settled hours':'mixed actual and forecast'));
+  $('partWarn').innerHTML = !part ? '' :
+    `<p class="warn" style="margin:0">Only <strong>HE${Math.min(...hrs)}–${Math.max(...hrs)}</strong> of this day exist yet.
+     AESO's wind and solar report is a rolling 216-hour window anchored on when it was pulled, and it
+     stops here — gas availability runs to 2 October and load to 1 October, but without a renewables
+     forecast there is no cushion. ${missEve
+       ? `<strong>The evening block is missing entirely</strong>, which is where almost all tightness happens, so the average above is not a day average and should not be read as one.`
+       : `Treat the average above as an average of those hours, not of the day.`}
+     Re-run the refresh tomorrow and this day fills in.</p>`;
+
+  $('tbody').innerHTML=rows.map(r=>{
+    const b=r.base,s=r.scen,[cls,lab,col]=state(s.cushion);
+    const dC=s.cushion-b.cushion;
+    const m=(a,bb)=>(dirty&&Math.abs(a-bb)>0.5)?'moved':'';
+    return `<tr>
+      <td class="l strong"><span class="stripe" style="background:${col}"></span>${r.h.he}</td>
+      <td class="num ${m(s.load,b.load)}">${mw(s.load)}</td>
+      <td class="num">${mw(s.cogen)}</td>
+      <td class="num ${m(s.cc,b.cc)}">${mw(s.cc)}</td>
+      <td class="num">${mw(s.gfs)}</td>
+      <td class="num">${mw(s.sc)}</td>
+      <td class="num ${m(s.wind,b.wind)}">${mw(s.wind)}</td>
+      <td class="num ${m(s.solar,b.solar)}">${mw(s.solar)}</td>
+      <td class="num ${m(s.it,b.it)}">${sgn(s.it)}</td>
+      <td class="num strong grp-s" style="color:${s.headroom<300?'var(--tight)':s.headroom<700?'var(--watch)':'var(--ink-2)'}">${mw(s.headroom)}</td>
+      <td class="num strong grp-s">${mw(s.cushion)}</td>
+      <td class="num" style="color:${Math.abs(dC)<1?'var(--ink-3)':'var(--s-scen)'}">${Math.abs(dC)<1?'—':sgn(dC)}</td>
+      <td class="num dim grp-s pxcol">${usd(s.q25)}</td>
+      <td class="num strong pxcol">${usd(s.q50)}</td>
+      <td class="num dim pxcol">${usd(s.q75)}</td>
+      <td class="num dim pxcol">${usd(s.q90)}</td>
+      <td class="num strong grp-s pxcol" title="expected value — the average outcome, the number to price a contract off">${usd(s.mean)}</td>
+      <td class="num grp-s pxcol ${pcls(s.p50)}">${pctf(s.p50)}</td>
+      <td class="num pxcol ${pcls(s.p100)}">${pctf(s.p100)}</td>
+      <td class="num pxcol ${pcls(s.p300)}">${pctf(s.p300)}</td>
+      <td class="l grp-s"><span class="pill ${cls}">${lab}</span></td>
+      <td class="num pxcol ${r.h.price==null?'dim':''}">${r.h.price==null?'—':usd(r.h.price)}</td>
+    </tr>`;
+  }).join('');
+
+  drawCushion(rows,dirty);
+
+  drawWhy(rows,dirty);
+
+  drawFund(rows); drawAna(rows); drawCrv(rows,dirty); drawPrice(rows); drawProb(rows,dirty);
+  drawFund(rows);
+}
+
+/* ---------- fundamentals: measured uncertainty ---------- */
+const B=D.bands, QL=B.quantiles;
+const FUNDS=[
+ {k:'wind',  name:'Wind',        get:r=>r.scen.wind,  unit:'MW', fan:true,
+  note:'The largest single uncertainty in the whole model, and it scales with the level — a 200 MW forecast is nearly certain, a 1,500 MW one can be 800 MW out either way. Recalibrated AESO forecast; 19,040 hours measured.'},
+ {k:'solar', name:'Solar',       get:r=>r.scen.solar, unit:'MW', fan:true,
+  note:'Well behaved, and zero at night by construction. All of the uncertainty sits in the shoulder hours when cloud decides whether 400 MW shows up or 900 MW does. Meteologica; 4,229 hours measured.'},
+ {k:'load',  name:'Load',        get:r=>r.scen.load,  unit:'MW', fan:true,
+  note:'The best-behaved input. The band barely changes with the level — roughly ±280 MW at the 90% mark whether demand is 9,000 or 11,500. Blend of AESO, Dynasty and Tesla forecasts; 18,902 hours measured.'},
+ {k:'gas',   name:'Gas availability', unit:'MW', fan:false,
+  note:'No day-ahead forecast archive exists, so this is the day-over-day change instead — a proxy, and a fair one, since what moves availability is a unit going on or off. Note the shape: the median change is zero (most days nothing happens) with long tails (occasionally a whole unit does). Combined cycle carries the biggest tail.'},
+ {k:'intertie', name:'Interties', unit:'MW', fan:false,
+  note:'Flows are not scheduled until roughly 9pm the night before. Run the read in the morning and this is one of your largest uncertainties; run it after 9pm and it very nearly disappears. That timing choice is worth more than any modelling change on this input.'},
+ {k:'cushion', name:'Cushion (all together)', get:r=>r.scen.cushion, unit:'MW', fan:true,
+  note:'Everything above, combined. This is the number the price curve reads, and it is the distribution the probability model smears over — so the price bands you see in the table already contain all of this.'},
+];
+let ftab='wind';
+function bandFor(k,v){
+  const rows=B[k]; if(!Array.isArray(rows)||!rows.length) return null;
+  // interpolate the quantiles across the level bands so they don't step at the edges
+  const mid=r=>{ const lo=Math.max(r.lo,-5000), hi=Math.min(r.hi, r.lo+ (r.hi>1e8?1200:0) + (r.hi>1e8?0:(r.hi-r.lo)) );
+                 return r.hi>1e8 ? r.lo+600 : (r.lo+r.hi)/2; };
+  const pts=rows.map(r=>({x:mid(r),q:r.q,mae:r.mae,n:r.n,lo:r.lo,hi:r.hi}));
+  if(v<=pts[0].x) return pts[0];
+  if(v>=pts[pts.length-1].x) return pts[pts.length-1];
+  let i=1; while(i<pts.length && pts[i].x<v) i++;
+  const a=pts[i-1], b=pts[i], t=(v-a.x)/(b.x-a.x);
+  return {q:a.q.map((x,j)=>x+t*(b.q[j]-x)), mae:a.mae+t*(b.mae-a.mae), lo:a.lo, hi:a.hi, n:a.n};
+}
+/* ---- the gas ladder -----------------------------------------------------
+   Alberta's gas fleet is four very different things offered at four very
+   different prices. Cogeneration runs anyway and offers near zero; the
+   simple-cycle peakers are the dear ones. Whether an hour is cheap or violent
+   comes down to whether demand reaches the peakers.                        */
+function ladderCard(rows,hrs){
+  const tight=rows.reduce((a,r)=>r.scen.headroom<a.scen.headroom?r:a,rows[0]);
+  const s=tight.scen;
+  const W=1000,H=96,L=10,R=10,T=30,B=26,iw=W-L-R;
+  const mx=Math.max(s.r4,s.need)*1.04;
+  const X=v=>L+Math.max(0,Math.min(v,mx))/mx*iw;
+  const seg=(a,b,fill,lab)=>{
+    const x0=X(a),x1=X(b);
+    return `<rect x="${x0.toFixed(1)}" y="${T}" width="${Math.max(0,x1-x0-2).toFixed(1)}" height="28" rx="3" fill="${fill}"/>`;
+  };
+  let g=seg(0,s.r1,'var(--s-base)')+seg(s.r1,s.r2,'var(--s-base)')
+       +seg(s.r2,s.r3,'var(--s-base)')+seg(s.r3,s.r4,'var(--tight)');
+  g=`<rect x="${L}" y="${T}" width="${(X(s.r1)-L-2).toFixed(1)}" height="28" rx="3" fill="var(--s-base)" fill-opacity=".30"/>`
+   +`<rect x="${X(s.r1).toFixed(1)}" y="${T}" width="${(X(s.r2)-X(s.r1)-2).toFixed(1)}" height="28" rx="3" fill="var(--s-base)" fill-opacity=".55"/>`
+   +`<rect x="${X(s.r2).toFixed(1)}" y="${T}" width="${(X(s.r3)-X(s.r2)-2).toFixed(1)}" height="28" rx="3" fill="var(--s-base)" fill-opacity=".85"/>`
+   +`<rect x="${X(s.r3).toFixed(1)}" y="${T}" width="${(X(s.r4)-X(s.r3)-2).toFixed(1)}" height="28" rx="3" fill="var(--tight)"/>`;
+  // where this hour's demand for gas lands
+  const xn=X(s.need);
+  g+=`<line x1="${xn.toFixed(1)}" x2="${xn.toFixed(1)}" y1="${T-10}" y2="${T+36}" stroke="var(--ink)" stroke-width="2.5"/>`
+   +`<text x="${xn.toFixed(1)}" y="${T-15}" font-size="12" text-anchor="middle" fill="var(--ink)" font-weight="700" font-family="IBM Plex Sans,sans-serif">needs ${mw(s.need)}</text>`;
+  const lab=(a,b,t)=>{const c=(X(a)+X(b))/2;
+    return (X(b)-X(a))<70?'':`<text x="${c.toFixed(1)}" y="${T+46}" font-size="11" text-anchor="middle" fill="var(--ink-3)" font-family="IBM Plex Sans,sans-serif">${t}</text>`;};
+  g+=lab(0,s.r1,'cogen')+lab(s.r1,s.r2,'comb cycle')+lab(s.r2,s.r3,'gas steam')+lab(s.r3,s.r4,'peakers');
+  const RN=['','cogeneration only','combined cycle','gas-fired steam','SIMPLE CYCLE','past the gas fleet'];
+  const col=s.rung>=4?'var(--tight)':s.headroom<300?'var(--tight)':s.headroom<700?'var(--watch)':'var(--ink)';
+  return `<div class="fc" style="grid-column:1/-1"><h4>The gas ladder</h4>
+    <div class="sub2">Gas runs cheapest first — cogeneration, combined cycle, gas-fired steam, then the peakers.
+      Shown at HE${tight.h.he}, the hour with the least room today.</div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img"
+      aria-label="How far into the gas ladder this hour reaches">${g}</svg>
+    <div class="hl">Reaches <b style="color:${col}">${RN[s.rung]}</b>, with
+      <b style="color:${col}">${mw(s.headroom)} MW</b> of room before the peakers are needed.</div>
+    <div class="hl" style="font-size:11.5px;color:var(--ink-3)">
+      cogen ${mw(s.cogen)} · combined cycle ${mw(s.cc)} · gas steam ${mw(s.gfs)} · simple cycle ${mw(s.sc)} MW available</div>
+  </div>`;
+}
+
+function drawFund(rows){
+  const F=FUNDS.find(f=>f.k===ftab);
+  $('ftabs').innerHTML=FUNDS.map(f=>
+    `<button class="ftab" type="button" data-ftab="${f.k}" aria-pressed="${f.k===ftab}">${f.name}</button>`).join('');
+  const host=$('fBody'); host.innerHTML='';
+  const wrap=document.createElement('div'); host.appendChild(wrap);
+
+  if(F.fan){
+    const vals=rows.map(F.get);
+    const bd=rows.map((r,i)=>bandFor(F.k,vals[i]));
+    const lvl=[{qi:6,lab:'P95',dash:'2 4',op:.45},{qi:5,lab:'P90',dash:'6 4',op:.9},
+               {qi:4,lab:'P75',dash:'3 3',op:.65},{qi:2,lab:'P25',dash:'3 3',op:.65},
+               {qi:1,lab:'P10',dash:'6 4',op:.9},{qi:0,lab:'P5',dash:'2 4',op:.45}];
+    const at=(i,qi)=>Math.max(0, vals[i] + (bd[i]?bd[i].q[qi]:0));
+    const W=1040,H=300,L=58,R=62,T=18,Bm=36,iw=W-L-R,ih=H-T-Bm;
+    // zoom to the band, not to zero — otherwise a +/-280 MW band on a 10,000 MW load is invisible
+    let bandLo=Math.min(...rows.map((r,i)=>at(i,0)));
+    let bandHi=Math.max(...rows.map((r,i)=>at(i,6)));
+    const span=bandHi-bandLo || 100;
+    let lo,hi;
+    if(bandLo < bandHi*0.18){ lo=0; hi=bandHi*1.06; }      // series that genuinely reaches zero
+    else { lo=Math.max(0,bandLo-span*0.22); hi=bandHi+span*0.22; }
+    if(hi<=lo) hi=lo+100;
+    const s=svg(W,H); wrap.appendChild(s);
+    const X=i=>L+(rows.length<2?iw/2:i*iw/(rows.length-1)), Y=v=>T+ih-(v-lo)/(hi-lo)*ih;
+    ticks(lo,hi,5).forEach(v=>{el(s,'line',{x1:L,x2:W-R,y1:Y(v),y2:Y(v),stroke:'var(--line)','stroke-width':1});
+      txt(s,L-9,Y(v)+3.5,Math.round(v).toLocaleString('en-CA'),{anchor:'end'});});
+    // faint shading for the middle half only, as orientation
+    const up=rows.map((r,i)=>`${i?'L':'M'}${X(i).toFixed(1)} ${Y(at(i,4)).toFixed(1)}`).join(' ');
+    const dn=rows.slice().reverse().map((r,j)=>{const i=rows.length-1-j;
+      return `L${X(i).toFixed(1)} ${Y(at(i,2)).toFixed(1)}`;}).join(' ');
+    el(s,'path',{d:up+' '+dn+' Z',fill:'var(--s-base)','fill-opacity':.10,stroke:'none'});
+    lvl.forEach(v=>{
+      const d=rows.map((r,i)=>`${i?'L':'M'}${X(i).toFixed(1)} ${Y(at(i,v.qi)).toFixed(1)}`).join(' ');
+      el(s,'path',{d,fill:'none',stroke:'var(--s-base)','stroke-width':1.3,'stroke-dasharray':v.dash,'stroke-opacity':v.op});
+    });
+    el(s,'path',{d:rows.map((r,i)=>`${i?'L':'M'}${X(i).toFixed(1)} ${Y(vals[i]).toFixed(1)}`).join(' '),
+      fill:'none',stroke:'var(--s-base)','stroke-width':2.6,'stroke-linejoin':'round'});
+    // right-edge labels, nudged apart so they never sit on top of each other
+    const last=rows.length-1;
+    const marks=lvl.map(v=>({y:Y(at(last,v.qi)),lab:v.lab,acc:false}))
+                   .concat([{y:Y(vals[last]),lab:'forecast',acc:true}])
+                   .sort((a,b)=>a.y-b.y);
+    const GAP=11;
+    for(let i=1;i<marks.length;i++) if(marks[i].y-marks[i-1].y<GAP) marks[i].y=marks[i-1].y+GAP;
+    const over=marks[marks.length-1].y-(T+ih);
+    if(over>0) marks.forEach(m=>m.y-=over);
+    marks.forEach(m=>{
+      el(s,'line',{x1:W-R,x2:W-R+4,y1:Y(m.acc?vals[last]:m.y),y2:m.y,stroke:'var(--line-2)','stroke-width':1});
+      txt(s,W-R+7,m.y+3.4,m.lab,{size:9.5,fill:m.acc?'var(--s-base)':'var(--ink-3)',weight:m.acc?700:600});
+    });
+    rows.forEach((r,i)=>{if(i%3===0||i===rows.length-1)txt(s,X(i),H-14,String(r.h.he),{anchor:'middle'});});
+    txt(s,W-R,H-2,'hour ending',{size:9.5,sans:1,anchor:'end'});
+    if(lo>0) txt(s,L,H-2,'axis starts at '+Math.round(lo).toLocaleString('en-CA')+' MW, not zero',
+                 {size:9.5,sans:1,fill:'var(--accent)'});
+
+    // the numbers, hour by hour
+    let t=`<table class="btab"><thead><tr><th class="l">HE</th><th>P5</th><th>P10</th><th>P25</th>
+      <th>forecast</th><th>P75</th><th>P90</th><th>P95</th><th>80% range</th></tr></thead><tbody>`;
+    rows.forEach((r,i)=>{
+      const w=at(i,5)-at(i,1);
+      t+=`<tr><td class="l strong">${r.h.he}</td>`
+        +[0,1,2].map(q=>`<td class="num dim">${Math.round(at(i,q)).toLocaleString('en-CA')}</td>`).join('')
+        +`<td class="num strong">${Math.round(vals[i]).toLocaleString('en-CA')}</td>`
+        +[4,5,6].map(q=>`<td class="num dim">${Math.round(at(i,q)).toLocaleString('en-CA')}</td>`).join('')
+        +`<td class="num" style="color:var(--accent)">${Math.round(w).toLocaleString('en-CA')}</td></tr>`;
+    });
+    t+='</tbody></table>';
+    const td=document.createElement('div'); td.className='tscroll'; td.innerHTML=t; wrap.appendChild(td);
+    const cap=document.createElement('p'); cap.className='fnote';
+    cap.innerHTML=`Read a row as: the forecast is the middle column, and the settled value landed between <strong>P10 and P90</strong> on eight days out of ten. The last column is how wide that 80% window is — the bigger it is, the less this hour is really known.`;
+    wrap.appendChild(cap);
+
+  } else if(F.k==='gas'){
+    let t=`<table class="btab"><thead><tr><th class="l">fuel type</th><th>typical move</th>`
+      + QL.map(q=>`<th>P${q}</th>`).join('')+`</tr></thead><tbody>`;
+    for(const key of ['cc','cogen','sc','gfs']){
+      const g=B.gas[key];
+      t+=`<tr><td class="l">${g.label}</td><td class="num">±${Math.round(g.mae)}</td>`
+        + g.q.map(x=>`<td class="num ${x<0?'neg':x>0?'pos':''}">${x>0?'+':''}${Math.round(x)}</td>`).join('')+`</tr>`;
+    }
+    t+='</tbody></table>';
+    const td=document.createElement('div'); td.className='tscroll'; td.innerHTML=t; wrap.appendChild(td);
+  } else {
+    const I=B.intertie;
+    let t=`<table class="btab"><thead><tr><th class="l">measure</th>`+QL.map(q=>`<th>P${q}</th>`).join('')+`</tr></thead><tbody>`;
+    t+=`<tr><td class="l">day-over-day change in net imports</td>`
+      + I.q.map(x=>`<td class="num ${x<0?'neg':x>0?'pos':''}">${x>0?'+':''}${Math.round(x)}</td>`).join('')+`</tr>`;
+    t+=`<tr><td class="l">where net imports actually sit</td>`
+      + I.level.map(x=>`<td class="num">${x>0?'+':''}${Math.round(x)}</td>`).join('')+`</tr>`;
+    t+='</tbody></table>';
+    const td=document.createElement('div'); td.className='tscroll'; td.innerHTML=t; wrap.appendChild(td);
+  }
+  const n=document.createElement('p'); n.className='fnote'; n.innerHTML=F.note; wrap.appendChild(n);
+  $('fSub').textContent = F.fan ? 'measured day-ahead error, conditional on the forecast level'
+                                : 'proxy measure — no day-ahead archive exists for this input';
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-ftab]'); if(!b) return;
+  ftab=b.dataset.ftab; render();
+});
+
+const NS='http://www.w3.org/2000/svg';
+const svg=(w,h)=>{const e=document.createElementNS(NS,'svg');e.setAttribute('viewBox',`0 0 ${w} ${h}`);
+  e.setAttribute('preserveAspectRatio','xMidYMid meet');e.setAttribute('role','img');return e;};
+const el=(p,n,a)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;};
+function txt(p,x,y,s,a={}){const e=el(p,'text',{x,y,'font-size':a.size||10,'text-anchor':a.anchor||'start',
+  fill:a.fill||'var(--ink-3)','font-weight':a.weight||400,
+  'font-family':a.sans?'IBM Plex Sans, sans-serif':'IBM Plex Mono, monospace'});e.textContent=s;return e;}
+function ticks(lo,hi,n){const sp=hi-lo||1,raw=sp/n,mag=Math.pow(10,Math.floor(Math.log10(raw)));
+  const st=[1,2,2.5,5,10].map(m=>m*mag).find(s=>s>=raw)||10*mag;
+  const o=[];for(let v=Math.ceil(lo/st)*st;v<=hi+1e-9;v+=st)o.push(+v.toFixed(6));return o;}
+
+/* ---- why this hour ------------------------------------------------------
+   The cushion is an accounting identity, so it can be attributed exactly.
+   Each bar is this hour's input minus the median of the last 30 days of
+   actuals for the same clock hour. The five add up to the gap between this
+   hour's cushion and a normal one - no model, just arithmetic.            */
+const DRV=[{k:'wind',  lab:'Wind',             note:'more wind helps'},
+           {k:'solar', lab:'Solar',            note:'more solar helps'},
+           {k:'load',  lab:'Load',             note:'lower load helps'},
+           {k:'gas',   lab:'Gas availability', note:'more available helps'},
+           {k:'it',    lab:'Interties',        note:'net imports help'}];
+
+function attribute(r){
+  const n=D.norm&&D.norm[String(r.h.he)]; if(!n) return null;
+  const s=r.scen;
+  const d={wind:s.wind-n.wind, solar:s.solar-n.solar,
+           load:-(s.load-n.load),           // less load is more cushion
+           gas:s.gas-n.gas, it:s.it-n.it};
+  const bio=r.h.bio||0;
+  const normCush=(n.gas+bio+n.wind+n.solar)-(n.load-n.it);
+  return {d,normCush,cushion:s.cushion,gap:s.cushion-normCush};
+}
+
+function drawWhy(rows,dirty){
+  // pick the hour: whatever is pinned, else the tightest of the day
+  const idx=whyHE!=null ? Math.max(0,rows.findIndex(r=>r.h.he===whyHE))
+                        : rows.reduce((a,r,i)=>r.scen.cushion<rows[a].scen.cushion?i:a,0);
+  const r=rows[idx], A=attribute(r);
+  const chips=$('whyChips');
+  chips.innerHTML=rows.map(x=>{
+    const t=x.scen.cushion<600?' t':'';
+    return `<button class="hchip${t}" data-whyhe="${x.h.he}" type="button" aria-pressed="${x.h.he===r.h.he}">HE${x.h.he}</button>`;
+  }).join('');
+  $('whySub').textContent=`vs a normal HE${r.h.he}, median of ${D.meta.norm_start} to ${D.meta.norm_end}`;
+  const host=$('c_why'); host.innerHTML='';
+  if(!A){ host.innerHTML='<p class="verdict">No baseline available for this hour.</p>'; return; }
+
+  const W=1040,ROW=38,T=30,B=16,L=178,R=26;
+  const H=T+B+ROW*DRV.length;
+  const sv=svg(W,H); host.appendChild(sv);
+  sv.setAttribute('aria-label',`Drivers of the cushion in hour ending ${r.h.he}`);
+  const half=(W-L-R)/2, CX=L+half;
+  const mx=Math.max(200,...DRV.map(x=>Math.abs(A.d[x.k])))*1.14;
+  const X=v=>CX+(v/mx)*half;
+
+  txt(sv,CX-10,15,'← removes cushion',{anchor:'end',size:9.5,sans:1,weight:600,fill:'var(--tight)'});
+  txt(sv,CX+10,15,'adds cushion →',{anchor:'start',size:9.5,sans:1,weight:600,fill:'var(--s-base)'});
+  el(sv,'line',{x1:CX,x2:CX,y1:T-6,y2:H-B+2,stroke:'var(--line-2)','stroke-width':1});
+
+  DRV.forEach((drv,i)=>{
+    const v=A.d[drv.k], y=T+i*ROW+(ROW-16)/2;
+    const x0=X(Math.min(0,v)), x1=X(Math.max(0,v));
+    const w=Math.max(Math.abs(x1-x0),1.5);
+    const pos=v>=0, col=pos?'var(--v-pos)':'var(--v-neg)';
+    // rounded on the data end only, anchored square to the zero line
+    const rx=4, sX=pos?CX:CX-w;
+    const g=el(sv,'g',{});
+    const p=pos
+      ? `M${sX} ${y} H${sX+w-rx} a${rx} ${rx} 0 0 1 ${rx} ${rx} v${16-2*rx} a${rx} ${rx} 0 0 1 ${-rx} ${rx} H${sX} Z`
+      : `M${CX} ${y} H${sX+rx} a${rx} ${rx} 0 0 0 ${-rx} ${rx} v${16-2*rx} a${rx} ${rx} 0 0 0 ${rx} ${rx} H${CX} Z`;
+    el(g,'path',{d:p,fill:col});
+    const ttl=document.createElementNS(NS,'title');
+    ttl.textContent=`${drv.lab}: ${sgn(v)} MW vs a normal HE${r.h.he}`; g.appendChild(ttl);
+    txt(sv,L-14,y+8,drv.lab,{anchor:'end',size:11.5,sans:1,fill:'var(--ink-2)',weight:500});
+    txt(sv,L-14,y+19,drv.note,{anchor:'end',size:9,sans:1,fill:'var(--ink-3)'});
+    txt(sv,pos?x1+8:x0-8,y+11.5,sgn(v),{anchor:pos?'start':'end',size:11.5,weight:600,fill:'var(--ink)'});
+  });
+
+  // the arithmetic, spelled out
+  const [,stLab,stCol]=state(A.cushion);
+  $('whySum').innerHTML=`
+    <div class="sumc"><span class="eyebrow">Normal HE${r.h.he}</span>
+      <div class="v num">${mw(A.normCush)}<span style="font-size:11px;color:var(--ink-3)"> MW</span></div></div>
+    <div class="sumc"><span class="eyebrow">Net of the five</span>
+      <div class="v num" style="color:${A.gap<0?'var(--v-neg)':'var(--v-pos)'}">${sgn(A.gap)}<span style="font-size:11px;color:var(--ink-3)"> MW</span></div></div>
+    <div class="sumc"><span class="eyebrow">This hour</span>
+      <div class="v num" style="color:${stCol}">${mw(A.cushion)}<span style="font-size:11px;color:var(--ink-3)"> MW · ${stLab}</span></div></div>
+    <div class="sumc"><span class="eyebrow">Chance above $100</span>
+      <div class="v num">${pctf(r.scen.p100)}</div></div>`;
+
+  // plain-English verdict, plus how far the forecast would have to be wrong
+  const sorted=DRV.map(x=>({...x,v:A.d[x.k]})).sort((a,b)=>Math.abs(b.v)-Math.abs(a.v));
+  const top=sorted[0], second=sorted[1];
+  const share=Math.abs(top.v)/DRV.reduce((a,x)=>a+Math.abs(A.d[x.k]),0);
+  const dir=v=>v<0?'short of':'above';
+  let lede;
+  if(Math.abs(A.gap)<150) lede=`Nothing much is happening in HE${r.h.he} — it sits within 150 MW of a normal one.`;
+  else lede=`<strong>${top.lab}</strong> is doing ${share>0.55?'most':'the bulk'} of it: ${sgn(top.v)} MW ${dir(top.v)} normal, with ${second.lab.toLowerCase()} next at ${sgn(second.v)} MW.`;
+
+  let need=null,risk=null;
+  const gg=r.scen.g;
+  for(let m2=0;m2<=3000;m2+=25){ if(need===null&&look(A.cushion+m2,gg).p100<0.20) need=m2;
+                                 if(risk===null&&look(A.cushion-m2,gg).p100>0.50) risk=m2; }
+  const itShare=A.d.it;
+  $('whyText').innerHTML=`
+    <p class="lede">${lede}</p>
+    <p>It would take <strong>${need===null?'more than 3,000':'about '+need.toLocaleString('en-CA')} MW</strong> of extra supply to bring this hour under a 20% chance of clearing $100, and
+    <strong>${risk===null?'more than 3,000':'about '+risk.toLocaleString('en-CA')} MW</strong> less to push it past 50%.
+    Day-ahead cushion error has averaged <strong>357 MW</strong>, so judge those distances against that, not against zero.</p>
+    ${itShare>100?`<p class="warn">Careful with the intertie bar. ${sgn(itShare)} MW of this hour's cushion is <em>modelled import response</em> — the assumption that neighbours send power when Alberta tightens. They usually do, but one evening in ten they send nothing. Set the intertie <strong>Source</strong> to <em>No import response</em> to see the hour with that assumption stripped out, or <em>Neighbours don't show</em> for the measured worst tenth.</p>`:''}`;
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-whyhe]'); if(!b) return;
+  const v=+b.dataset.whyhe; whyHE=(whyHE===v)?null:v; render();
+});
+
+/* ---- the offer stack ----------------------------------------------------
+   From AESO's merit order: MW offered at or below each price. No dispatch
+   figure is used - that field does not reconcile with load in the archive,
+   and it is not needed here. The shape is what carries the intuition:
+   flat and cheap for two thousand megawatts, then nearly vertical.        */
+/* ---- supply remaining vs price -----------------------------------------
+   The workbook's picture, with the model's calibrated bands in place of the
+   fitted cubics and split by time of day. Cushion runs left to right; every
+   hour of the day sits somewhere on it; the sliders slide you along it.   */
+/* ---- days that looked like this one ------------------------------------
+   Nearest neighbours over the day's fundamentals - evening cushion and wind
+   weighted hardest, with a mild seasonal penalty - then simply report what
+   actually settled. The spread between the three is the useful part.      */
+/* ---- fundamentals first -------------------------------------------------
+   Six small charts, one per driver, each against the median of the last 30
+   days for the same clock hour. No prices anywhere - the point is to form a
+   view before the model shows you its answer.                              */
+const FD=[
+ {k:'load', lab:'Alberta load',      unit:'MW', norm:'load', dir:-1,
+  why:'More load eats cushion. Peaks late afternoon into the evening.'},
+ {k:'wind', lab:'Wind',              unit:'MW', norm:'wind', dir:+1, band:['w_lo','w_hi'],
+  why:"The single biggest swing factor. Shaded band is AESO's own Min-to-Max."},
+ {k:'solar',lab:'Solar',             unit:'MW', norm:'solar',dir:+1, band:['s_lo','s_hi'],
+  why:'Irrelevant overnight. What matters is how fast it falls away at dusk.'},
+ {k:'ladder',lab:'The gas ladder',      unit:'MW', norm:null,   dir:+1, ladder:true,
+  why:'Gas runs cheapest first. The question is which rung this hour reaches.'},
+ {k:'it',   lab:'Net imports',       unit:'MW', norm:'it',   dir:+1, assumed:true,
+  why:'ASSUMED, not scheduled. The model guesses neighbours lean in when tight.'},
+ {k:'cush', lab:'Cushion',           unit:'MW', norm:null,   dir:+1, big:true,
+  why:'Everything above, netted. This is what the price read is built from.'}];
+
+function fundVals(rows,k){
+  return rows.map(r=>{
+    if(k==='cush') return r.scen.cushion;
+    if(k==='gas')  return r.scen.gas;
+    if(k==='it')   return r.scen.it;
+    return r.scen[k];
+  });
+}
+function drawFund(rows){
+  if(!D.norm){ $('fundPanel').style.display='none'; return; }
+  $('fundPanel').style.display='';
+  $('fundSub').textContent=`${fmtDay(day)} · dashed line is a normal hour, median of ${D.meta.norm_start} to ${D.meta.norm_end}`;
+  const hrs=rows.map(r=>r.h.he);
+  const normOf=(nk)=>nk?rows.map(r=>{const n=D.norm[String(r.h.he)];return n?n[nk]:null;}):null;
+  const cushNorm=rows.map(r=>{const n=D.norm[String(r.h.he)];
+    return n?(n.gas+(r.h.bio||0)+n.wind+n.solar)-(n.load-n.it):null;});
+
+  $('fundGrid').innerHTML=FD.map(f=>{
+    if(f.ladder) return ladderCard(rows,hrs);
+    const v=fundVals(rows,f.k);
+    const nv=f.k==='cush'?cushNorm:normOf(f.norm);
+    const lo=f.band?rows.map(r=>r.h[f.band[0]]??null):null;
+    const hi=f.band?rows.map(r=>r.h[f.band[1]]??null):null;
+    const W=330,H=92,L=40,R=8,T=10,B=16,iw=W-L-R,ih=H-T-B;
+    const all=[...v,...(nv||[]),...(lo||[]),...(hi||[])].filter(x=>x!=null&&isFinite(x));
+    let mn=Math.min(...all), mx=Math.max(...all);
+    if(f.k==='wind'||f.k==='solar') mn=Math.min(0,mn);   // renewables read against zero
+    const pad=(mx-mn)*0.10||50; mn-=pad; mx+=pad;
+    if(f.k!=='it'&&f.k!=='cush') mn=Math.max(0,mn);      // never show negative megawatts
+    const X=i=>L+(rows.length<2?iw/2:i*iw/(rows.length-1));
+    const Y=x=>T+ih-(x-mn)/(mx-mn)*ih;
+    let g='';
+    [mn,(mn+mx)/2,mx].forEach(t=>{ g+=`<line x1="${L}" x2="${W-R}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}" stroke="var(--line)" stroke-width="1"/>`
+      +`<text x="${L-6}" y="${(Y(t)+3).toFixed(1)}" font-size="8.5" text-anchor="end" fill="var(--ink-3)" font-family="IBM Plex Mono,monospace">${Math.round(t).toLocaleString('en-CA')}</text>`;});
+    if(f.k==='cush'){ const y6=Y(600);
+      if(600>mn&&600<mx) g+=`<line x1="${L}" x2="${W-R}" y1="${y6.toFixed(1)}" y2="${y6.toFixed(1)}" stroke="var(--tight)" stroke-width="1" stroke-dasharray="3 3" opacity=".8"/>`;}
+    if(lo&&lo.every(x=>x!=null)){
+      const up=hi.map((x,i)=>`${i?'L':'M'}${X(i).toFixed(1)} ${Y(x).toFixed(1)}`).join(' ');
+      const dn=lo.slice().reverse().map((x,j)=>`L${X(lo.length-1-j).toFixed(1)} ${Y(x).toFixed(1)}`).join(' ');
+      g+=`<path d="${up} ${dn} Z" fill="var(--s-base)" fill-opacity=".16"/>`;}
+    if(nv&&nv.every(x=>x!=null))
+      g+=`<path d="${nv.map((x,i)=>`${i?'L':'M'}${X(i).toFixed(1)} ${Y(x).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--ink-3)" stroke-width="1.4" stroke-dasharray="4 3"/>`;
+    g+=`<path d="${v.map((x,i)=>`${i?'L':'M'}${X(i).toFixed(1)} ${Y(x).toFixed(1)}`).join(' ')}" fill="none" stroke="${f.assumed?'var(--watch)':'var(--s-base)'}" stroke-width="2.2" stroke-linejoin="round"/>`;
+    // evening block marker
+    const e1=hrs.indexOf(17), e2=hrs.indexOf(21);
+    if(e1>=0&&e2>=0) g+=`<rect x="${X(e1).toFixed(1)}" y="${T}" width="${(X(e2)-X(e1)).toFixed(1)}" height="${ih}" fill="var(--ink)" fill-opacity=".045"/>`;
+
+    // the one-line takeaway
+    const ev=v.filter((_,i)=>hrs[i]>=17&&hrs[i]<=21);
+    const evn=nv?nv.filter((_,i)=>hrs[i]>=17&&hrs[i]<=21):null;
+    let note='';
+    if(ev.length&&evn&&evn.every(x=>x!=null)){
+      const d=ev.reduce((a,b)=>a+b,0)/ev.length - evn.reduce((a,b)=>a+b,0)/evn.length;
+      const w=Math.abs(d)<60?'about normal':(d>0?'above normal':'below normal');
+      note=`Evening: <b>${mw(ev.reduce((a,b)=>a+b,0)/ev.length)} ${f.unit}</b>, ${w}${Math.abs(d)>=60?` by ${mw(Math.abs(d))}`:''}.`;
+    } else if(ev.length){
+      note=`Evening average <b>${mw(ev.reduce((a,b)=>a+b,0)/ev.length)} ${f.unit}</b>.`;
+    }
+    if(f.k==='wind'&&lo&&lo.every(x=>x!=null)){
+      const i20=hrs.indexOf(20)>=0?hrs.indexOf(20):Math.floor(rows.length*0.8);
+      note+=` AESO's own range at HE${hrs[i20]}: <b>${mw(lo[i20])}–${mw(hi[i20])}</b>.`;
+    }
+    if(f.k==='cush'){
+      const mi=v.indexOf(Math.min(...v));
+      note=`Tightest at <b>HE${hrs[mi]}</b>, <b>${mw(v[mi])} MW</b>.`;
+    }
+    return `<div class="fc"><h4>${f.lab}</h4><div class="sub2">${f.why}</div>
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img" aria-label="${f.lab} through the day">${g}</svg>
+      <div class="hl">${note}</div></div>`;}).join('');
+
+  const cv=fundVals(rows,'cush'); const mi=cv.indexOf(Math.min(...cv));
+  const itv=fundVals(rows,'it')[mi];
+  $('fundText').innerHTML=`
+    <p class="lede">Look at these six, decide what you think the day is, and write the number down.
+      Then switch to <strong>Full read</strong> and see whether the model agrees.</p>
+    <p>The shaded vertical strip on each chart is HE17–21, where almost all tightness happens.
+      The dashed grey line is what a normal hour looks like for this time of the last month, so
+      anywhere the solid line pulls away from the dashed one, something is different today.</p>
+    <p><strong>How to read the gas ladder.</strong> Alberta almost never runs out of power — it runs out of
+      <em>cheap</em> power. The bar is the gas fleet in the order it gets used, and the black line is how much
+      this hour actually needs from gas once wind, solar, hydro, storage and the interties have done their bit.
+      If that line sits inside the first three blocks the hour is ordinary. If it reaches the red block, the
+      peakers are setting the price. Measured over 17,805 hours: hours that stayed inside combined cycle had a
+      median price of <strong>$12</strong>; hours that reached gas-fired steam, <strong>$31</strong>; hours that
+      needed simple cycle, <strong>$769</strong>, and 94% of them cleared $100.</p>
+    <p class="warn">One of these six is not a measurement. <strong>Net imports are assumed</strong> — the
+      model's guess that neighbours send power when Alberta tightens. At the tightest hour
+      (HE${rows[mi].h.he}) that guess is contributing <strong>${sgn(itv)} MW</strong> of the
+      ${mw(cv[mi])} MW cushion. Everything else on this page is filed or forecast by AESO.</p>`;
+}
+
+function drawAna(rows){
+  const A=D.analog&&D.analog[day];
+  const host=$('anaBody');
+  if(!A){ $('anaSub').textContent='';
+    host.innerHTML='<p class="fnote">No match set for this day — analogues are computed for forecast days only.</p>';
+    $('anaText').innerHTML=''; return; }
+  const t=A.target;
+  $('anaSub').textContent=`nearest days in ${(725).toLocaleString('en-CA')} of history, matched on the day's fundamentals`;
+  const px=A.matches.map(m=>m.px_avg);
+  const spark=(prof,w=250,h=38)=>{
+    const v=prof.filter(x=>x!=null); if(!v.length) return '';
+    const hi=Math.max(30,...v), P=v.map((x,i)=>
+      `${i?'L':'M'}${(i/(v.length-1)*w).toFixed(1)} ${(h-Math.min(x,hi)/hi*h).toFixed(1)}`).join(' ');
+    return `<svg class="spark" viewBox="0 0 ${w} ${h}" style="width:100%;height:${h}px" aria-hidden="true">
+      <path d="${P}" fill="none" stroke="var(--s-scen)" stroke-width="1.8" stroke-linejoin="round"/>
+      <line x1="0" x2="${w}" y1="${(h-Math.min(100,hi)/hi*h).toFixed(1)}" y2="${(h-Math.min(100,hi)/hi*h).toFixed(1)}"
+        stroke="var(--tight)" stroke-width="1" stroke-dasharray="3 3" opacity=".7"/></svg>`;
+  };
+  host.innerHTML=`<div class="ana">`+A.matches.map(m=>{
+    const dd=new Date(m.day+'T12:00:00');
+    return `<div class="anac">
+      <h4>${dd.toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric',year:'numeric'})}</h4>
+      <div class="when">closeness ${m.score.toFixed(2)} — lower is nearer</div>
+      <div class="kv"><span>Evening cushion</span><b>${mw(m.cush_ev)} MW <span style="color:var(--ink-3);font-weight:400">vs ${mw(t.cush_ev)}</span></b></div>
+      <div class="kv"><span>Evening wind</span><b>${mw(m.wind_ev)} MW <span style="color:var(--ink-3);font-weight:400">vs ${mw(t.wind_ev)}</span></b></div>
+      <div class="kv"><span>Peak load</span><b>${mw(m.load_pk)} MW <span style="color:var(--ink-3);font-weight:400">vs ${mw(t.load_pk)}</span></b></div>
+      ${spark(m.prof)}
+      <div class="out">
+        <div class="kv"><span>What it settled</span><b>${usd(m.px_avg)}</b></div>
+        <div class="kv"><span>Worst hour</span><b style="color:${m.px_max>=300?'var(--tight)':'var(--ink)'}">${usd(m.px_max)}</b></div>
+        <div class="kv"><span>Hours over $100 / $300</span><b>${m.n100} / ${m.n300}</b></div>
+      </div></div>`;}).join('')+`</div>`;
+
+  const lo=Math.min(...px), hi=Math.max(...px);
+  const mdl=rows.reduce((a,r)=>a+r.scen.mean,0)/rows.length;
+  const anyBig=A.matches.some(m=>m.px_max>=300);
+  $('anaText').innerHTML=`
+    <p class="lede">The three closest days in two years of history settled between
+      <strong>${usd(lo)}</strong> and <strong>${usd(hi)}</strong>. The model's expected value for
+      this day is <strong>${usd(mdl)}</strong>.</p>
+    <p>${hi/Math.max(lo,1)>2.5
+      ? `Note how far apart those three are. Nearly identical fundamentals, very different outcomes — that gap is the part of the price the cushion cannot see, and it is why the bands on this page are as wide as they are.`
+      : `The three sit close together, which is the more comfortable case: similar setups produced similar prices, so the fundamentals were doing most of the work.`}
+      ${anyBig?`<strong>At least one of them had an hour over $300.</strong> A day can average something ordinary and still contain an hour that does real damage — read the worst-hour row, not just the average.`:''}</p>
+    <p class="warn">How the matching works, and what it cannot do. Days are compared on evening cushion,
+      evening wind, minimum cushion, peak and average load, solar and gas availability, with evening
+      tightness weighted hardest and a small penalty for being in the wrong season. There is no
+      temperature archive, so <strong>load stands in for weather</strong> — in Alberta load is largely a
+      temperature response, which makes it a fair proxy rather than a missing input. Three matches is a
+      sample of three: treat them as anecdotes that put a range around the model, never as a forecast.</p>`;
+}
+
+function drawCrv(rows,dirty){
+  const idx=whyHE!=null ? Math.max(0,rows.findIndex(r=>r.h.he===whyHE))
+                        : rows.reduce((a,r,i)=>r.scen.cushion<rows[a].scen.cushion?i:a,0);
+  const r=rows[idx], g=r.scen.g;
+  const GN=['Overnight HE1–6','Morning HE7–10','Midday HE11–16','Evening HE17–21','Late HE22–24'];
+  $('crvSub').textContent=`${GN[g]} · ${D.meta.curve_start} to ${D.meta.curve_end}, spread from ${D.meta.pool_days} days`;
+  const host=$('c_crv'); host.innerHTML='';
+  const W=1040,H=360,L=64,R=26,T=18,B=42,iw=W-L-R,ih=H-T-B;
+  const sv=svg(W,H); host.appendChild(sv);
+  sv.setAttribute('aria-label','Pool price against supply remaining');
+  const cLo=-200,cHi=3200;
+  const pts=G[g].filter(p=>p.c>=cLo&&p.c<=cHi);
+  const yHi=1000;
+  const X=c=>L+(c-cLo)/(cHi-cLo)*iw, Y=v=>T+ih-Math.min(v,yHi)/yHi*ih;
+
+  [0,200,400,600,800,1000].forEach(v=>{
+    el(sv,'line',{x1:L,x2:W-R,y1:Y(v),y2:Y(v),stroke:'var(--line)','stroke-width':1});
+    txt(sv,L-9,Y(v)+3.5,'$'+v.toLocaleString('en-CA'),{anchor:'end'});});
+  [0,600,1200,1800,2400,3000].forEach(c=>{
+    el(sv,'line',{x1:X(c),x2:X(c),y1:T,y2:T+ih,stroke:'var(--line)','stroke-width':1,'stroke-opacity':.55});
+    txt(sv,X(c),H-22,c.toLocaleString('en-CA'),{anchor:'middle'});});
+  txt(sv,L+iw/2,H-6,'supply remaining — the cushion, MW',{anchor:'middle',size:9.5,sans:1});
+  el(sv,'rect',{x:X(cLo),y:T,width:Math.max(0,X(600)-X(cLo)),height:ih,fill:'var(--tight)','fill-opacity':.06});
+  txt(sv,X(600)-8,T+13,'tight',{anchor:'end',size:9.5,sans:1,weight:600,fill:'var(--tight)'});
+
+  const path=k=>pts.map((p,i)=>`${i?'L':'M'}${X(p.c).toFixed(1)} ${Y(p[k]).toFixed(1)}`).join(' ');
+  const up=path('q90');
+  const dn=pts.slice().reverse().map(p=>`L${X(p.c).toFixed(1)} ${Y(p.q25).toFixed(1)}`).join(' ');
+  el(sv,'path',{d:up+' '+dn+' Z',fill:'var(--s-scen)','fill-opacity':.22,stroke:'none'});
+  el(sv,'path',{d:path('mean'),fill:'none',stroke:'var(--s-base)','stroke-width':2,'stroke-dasharray':'5 4'});
+  el(sv,'path',{d:path('q50'),fill:'none',stroke:'var(--ink)','stroke-width':2.4,'stroke-linejoin':'round'});
+
+  // every hour of the day, sitting on the curve
+  rows.forEach(x=>{
+    if(x===r) return;
+    el(sv,'circle',{cx:X(Math.min(Math.max(x.scen.cushion,cLo),cHi)),cy:Y(x.scen.q50),
+      r:3.6,fill:'var(--ink-3)',stroke:'var(--surface)','stroke-width':1.4});
+    if(x.h.price!=null)
+      el(sv,'circle',{cx:X(Math.min(Math.max(x.scen.cushion,cLo),cHi)),cy:Y(x.h.price),
+        r:3.4,fill:'var(--ok)',stroke:'var(--surface)','stroke-width':1.2});
+  });
+  // filed vs scenario for the chosen hour
+  const put=(c,v,col,lab)=>{
+    const x=X(Math.min(Math.max(c,cLo),cHi)), y=Y(v);
+    el(sv,'line',{x1:x,x2:x,y1:y,y2:T+ih,stroke:col,'stroke-width':1,'stroke-dasharray':'3 3','stroke-opacity':.6});
+    el(sv,'circle',{cx:x,cy:y,r:6,fill:col,stroke:'var(--surface)','stroke-width':2});
+    txt(sv,x,y-12,lab,{anchor:'middle',size:10.5,weight:600,fill:'var(--ink)'});
+  };
+  if(dirty) put(r.base.cushion,r.base.q50,'var(--s-base)',`filed ${mw(r.base.cushion)}`);
+  put(r.scen.cushion,r.scen.q50,'var(--s-scen)',`HE${r.h.he} · ${mw(r.scen.cushion)} MW`);
+
+  const c0=r.scen.cushion, at=d=>look(c0+d,g).q50;
+  $('crvSum').innerHTML=`
+    <div class="sumc"><span class="eyebrow">HE${r.h.he} sits at</span>
+      <div class="v num">${mw(c0)}<span style="font-size:11px;color:var(--ink-3)"> MW</span></div></div>
+    <div class="sumc"><span class="eyebrow">300 MW tighter</span>
+      <div class="v num" style="color:var(--tight)">${usd(at(-300))}</div></div>
+    <div class="sumc"><span class="eyebrow">Here</span>
+      <div class="v num">${usd(at(0))}</div></div>
+    <div class="sumc"><span class="eyebrow">300 MW looser</span>
+      <div class="v num" style="color:var(--ok)">${usd(at(300))}</div></div>`;
+  const slope=(at(-100)-at(0));
+  $('crvText').innerHTML=`
+    <p class="lede">The curve is flat to the right and vertical to the left. HE${r.h.he} sits at
+      <strong>${mw(c0)} MW</strong>, where the next 100 MW of tightness is worth
+      <strong>${usd(slope)}</strong> on the middle outcome.</p>
+    <p>Every grey dot is another hour of this day on the same curve — the day's whole trajectory
+      across the stack. Green dots are hours that have already settled, plotted at what they
+      actually printed, so you can see how far real prints scatter around the line.</p>
+    <p>This is the workbook's <em>Supply Remaining vs. Price</em> chart with two changes: the bands
+      are the model's calibrated quantiles rather than fitted cubics, and the curve is drawn for this
+      hour's time-of-day block, because the same cushion is worth very different money at 3am and 8pm.</p>`;
+}
+
+
+function drawCushion(rows,dirty){
+  const W=1040,H=270,L=56,R=16,T=18,B=34,iw=W-L-R,ih=H-T-B;
+  const host=$('c_cush');host.innerHTML='';const s=svg(W,H);host.appendChild(s);
+  const v=rows.flatMap(r=>[r.base.cushion,r.scen.cushion]);
+  let lo=Math.min(0,...v),hi=Math.max(...v);const pd=(hi-lo)*0.12||100;lo-=pd;hi+=pd;
+  const X=i=>L+(rows.length<2?iw/2:i*iw/(rows.length-1)), Y=x=>T+ih-(x-lo)/(hi-lo)*ih;
+  if(600>lo) el(s,'rect',{x:L,y:Y(Math.min(600,hi)),width:iw,height:Math.max(0,Y(lo)-Y(Math.min(600,hi))),fill:'var(--tight)','fill-opacity':.07});
+  ticks(lo,hi,5).forEach(x=>{el(s,'line',{x1:L,x2:W-R,y1:Y(x),y2:Y(x),stroke:'var(--line)','stroke-width':1});
+    txt(s,L-9,Y(x)+3.5,x.toLocaleString('en-CA'),{anchor:'end'});});
+  if(lo<600&&hi>600){el(s,'line',{x1:L,x2:W-R,y1:Y(600),y2:Y(600),stroke:'var(--tight)','stroke-width':1,'stroke-dasharray':'3 3','stroke-opacity':.7});
+    txt(s,L+6,Y(600)-7,'600 MW — tight',{fill:'var(--tight)',size:9.5,weight:600,sans:1});}
+  rows.forEach((r,i)=>{if(i%3===0||i===rows.length-1)txt(s,X(i),H-14,String(r.h.he),{anchor:'middle'});});
+  txt(s,W-R,H-2,'hour ending',{size:9.5,sans:1,anchor:'end'});
+  const path=(k,c,w)=>{const d=rows.map((r,i)=>`${i?'L':'M'}${X(i).toFixed(1)} ${Y(r[k].cushion).toFixed(1)}`).join(' ');
+    el(s,'path',{d,fill:'none',stroke:c,'stroke-width':w,'stroke-linejoin':'round','stroke-linecap':'round'});};
+  path('base','var(--s-base)',dirty?2:2.4);
+  if(dirty) path('scen','var(--s-scen)',2.4);
+  const mi=rows.reduce((a,r,i)=>r.scen.cushion<rows[a].scen.cushion?i:a,0);
+  el(s,'circle',{cx:X(mi),cy:Y(rows[mi].scen.cushion),r:4.5,fill:dirty?'var(--s-scen)':'var(--s-base)',stroke:'var(--surface)','stroke-width':2});
+  txt(s,X(mi),Y(rows[mi].scen.cushion)-11,mw(rows[mi].scen.cushion),{anchor:'middle',size:10.5,weight:600,fill:'var(--ink)'});
+}
+
+function drawPrice(rows){
+  const W=520,H=290,L=54,R=14,T=16,B=34,iw=W-L-R,ih=H-T-B;
+  const host=$('c_price');host.innerHTML='';const s=svg(W,H);host.appendChild(s);
+  const settled=rows.filter(r=>r.h.price!=null).map(r=>r.h.price);
+  const hi=Math.max(60,...rows.map(r=>r.scen.q90),...settled)*1.1;
+  const X=i=>L+(rows.length<2?iw/2:i*iw/(rows.length-1)), Y=v=>T+ih-Math.min(v,hi)/hi*ih;
+  ticks(0,hi,5).forEach(v=>{el(s,'line',{x1:L,x2:W-R,y1:Y(v),y2:Y(v),stroke:'var(--line)','stroke-width':1});
+    txt(s,L-8,Y(v)+3.5,'$'+v.toLocaleString('en-CA'),{anchor:'end'});});
+  rows.forEach((r,i)=>{if(i%4===0||i===rows.length-1)txt(s,X(i),H-14,String(r.h.he),{anchor:'middle'});});
+  txt(s,W-R,H-2,'hour ending',{size:9.5,sans:1,anchor:'end'});
+  const band=(a,b,op)=>{
+    const up=rows.map((r,i)=>`${i?'L':'M'}${X(i).toFixed(1)} ${Y(r.scen[b]).toFixed(1)}`).join(' ');
+    const dn=rows.slice().reverse().map((r,j)=>{const i=rows.length-1-j;return `L${X(i).toFixed(1)} ${Y(r.scen[a]).toFixed(1)}`;}).join(' ');
+    el(s,'path',{d:up+' '+dn+' Z',fill:'var(--s-scen)','fill-opacity':op,stroke:'none'});};
+  band('q10','q90',.13); band('q25','q75',.28);
+  el(s,'path',{d:rows.map((r,i)=>`${i?'L':'M'}${X(i).toFixed(1)} ${Y(r.scen.q50).toFixed(1)}`).join(' '),
+    fill:'none',stroke:'var(--s-scen)','stroke-width':2.4,'stroke-linejoin':'round'});
+  rows.forEach((r,i)=>{ if(r.h.price!=null)
+    el(s,'circle',{cx:X(i),cy:Y(r.h.price),r:3.2,fill:'var(--ink)',stroke:'var(--surface)','stroke-width':1.4}); });
+}
+
+function drawProb(rows,dirty){
+  const W=520,H=290,L=48,R=14,T=16,B=34,iw=W-L-R,ih=H-T-B;
+  const host=$('c_prob');host.innerHTML='';const s=svg(W,H);host.appendChild(s);
+  const hi=Math.max(.2,...rows.map(r=>r.scen.p100),...rows.map(r=>r.base.p100))*1.15;
+  const X=i=>L+(rows.length<2?iw/2:i*iw/(rows.length-1)), Y=v=>T+ih-v/hi*ih;
+  ticks(0,hi,5).forEach(v=>{el(s,'line',{x1:L,x2:W-R,y1:Y(v),y2:Y(v),stroke:'var(--line)','stroke-width':1});
+    txt(s,L-8,Y(v)+3.5,(100*v).toFixed(0)+'%',{anchor:'end'});});
+  rows.forEach((r,i)=>{if(i%4===0||i===rows.length-1)txt(s,X(i),H-14,String(r.h.he),{anchor:'middle'});});
+  txt(s,W-R,H-2,'hour ending',{size:9.5,sans:1,anchor:'end'});
+  if(dirty) el(s,'path',{d:rows.map((r,i)=>`${i?'L':'M'}${X(i).toFixed(1)} ${Y(r.base.p100).toFixed(1)}`).join(' '),
+    fill:'none',stroke:'var(--s-base)','stroke-width':1.8,'stroke-opacity':.6,'stroke-dasharray':'4 3'});
+  el(s,'path',{d:rows.map((r,i)=>`${i?'L':'M'}${X(i).toFixed(1)} ${Y(r.scen.p300).toFixed(1)}`).join(' '),
+    fill:'none',stroke:'var(--watch)','stroke-width':2});
+  el(s,'path',{d:rows.map((r,i)=>`${i?'L':'M'}${X(i).toFixed(1)} ${Y(r.scen.p100).toFixed(1)}`).join(' '),
+    fill:'none',stroke:'var(--tight)','stroke-width':2.4});
+  const pi=rows.reduce((a,r,i)=>r.scen.p100>rows[a].scen.p100?i:a,0);
+  el(s,'circle',{cx:X(pi),cy:Y(rows[pi].scen.p100),r:4.5,fill:'var(--tight)',stroke:'var(--surface)','stroke-width':2});
+  txt(s,X(pi),Y(rows[pi].scen.p100)-11,pctf(rows[pi].scen.p100),{anchor:'middle',size:10.5,weight:600,fill:'var(--ink)'});
+}
+
+function syncLabels(){
+  const set=(id,v,u,inv)=>{const e=$(id);e.textContent=(v>0?'+':'')+v+u;
+    e.className='cval num'+(v===0?'':((inv?v<0:v>0)?' pos':' neg'));};
+  set('v_load',S.load,' MW',true); set('v_wind',S.wind,'%',false); set('v_solar',S.solar,'%',false);
+  set('v_cc',S.cc,' MW',false); set('v_cog',S.cog,' MW',false); set('v_sc',S.sc,' MW',false);
+  set('v_gfs',S.gfs,' MW',false); set('v_it',S.it,' MW',false);
+}
+const SL=[['s_load','load'],['s_wind','wind'],['s_solar','solar'],['s_cc','cc'],['s_cog','cog'],['s_sc','sc'],['s_gfs','gfs'],['s_it','it']];
+SL.forEach(([id,k])=>$(id).addEventListener('input',e=>{S[k]=+e.target.value;syncLabels();render();}));
+$('m_it').addEventListener('change',e=>{S.itMode=e.target.value;render();});
+const PRE={reset:{...ZERO},
+  cctrip:{...ZERO,cc:-450}, calm:{...ZERO,wind:-80}, heat:{...ZERO,load:900,wind:-40,it:-300}};
+document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click',()=>{
+  Object.assign(S,PRE[b.dataset.preset]);
+  SL.forEach(([id,k])=>{$(id).value=S[k];}); $('m_it').value=S.itMode; syncLabels(); render();}));
+$('daybar').innerHTML=days.map(d=>{
+  const n=D.hours.filter(h=>h.dt.slice(0,10)===d).length;
+  return `<button class="chip" type="button" data-day="${d}" aria-pressed="${d===day}"${
+    n<24?` title="only ${n} of 24 hours published"`:''}>${fmtDay(d)}${
+    n<24?`<span style="opacity:.6;font-weight:400"> · ${n}h</span>`:''}</button>`;}).join('');
+function applyView(){
+  document.body.classList.toggle('fundmode',view==='fund');
+  document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===view)));
+  $('vhint').textContent = view==='fund'
+    ? 'prices hidden on purpose — form your own view first'
+    : 'everything, including the model\u2019s answer';
+}
+document.querySelector('.viewbar').addEventListener('click',e=>{
+  const b=e.target.closest('[data-view]'); if(!b) return;
+  view=b.dataset.view; applyView(); render();
+});
+applyView();
+$('daybar').addEventListener('click',e=>{const b=e.target.closest('[data-day]');if(!b)return;
+  day=b.dataset.day;document.querySelectorAll('[data-day]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.day===day)));render();});
+const last=D.hours.filter(h=>h.price!=null).map(h=>h.dt).sort().pop();
+$('vintage').innerHTML=`Fundamentals filed through ${last?new Date(last).toLocaleString('en-CA',{month:'short',day:'numeric',hour:'numeric'}):'—'} MT · price curve from ${D.meta.curve_start} to ${D.meta.curve_end} · spread from ${D.meta.pool_days} days`
+  + (D.meta.bundle_age_days>45 ? ` · <strong style="color:var(--tight)">history frozen since ${D.meta.bundle_built} — rebuild the bundle</strong>` : '');
+
+// ---- the accuracy panel, measured on this refresh's own backtest ----
+(function(){
+  const A=(D.meta.gates||{}).acc; if(!A) return;
+  const g=t=>(D.meta.gates||{})[String(t)]||{};
+  const MON=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const ms=d=>MON[+d.slice(5,7)-1], yr=d=>d.slice(0,4);
+  $('accHead').textContent=`Measured on ${A.n.toLocaleString()} hours, ${ms(A.start)} ${yr(A.start)} to `
+    +`${ms(A.end)} ${yr(A.end)}, each hour scored only against data that existed beforehand.`;
+  $('accRel').innerHTML=A.rel.map(r=>
+    `<tr><td class="l">${r.lab}</td><td>${r.n.toLocaleString()}</td><td>${r.said.toFixed(1)}%</td><td>${r.was.toFixed(1)}%</td></tr>`).join('');
+  // the worst band, by how far the outcome ran past what was stated
+  let w=null; A.rel.forEach(r=>{ if(r.n>=20 && (w===null || (r.was-r.said)>(w.was-w.said))) w=r; });
+  $('accRead').innerHTML = w && (w.was-w.said)>3
+    ? `The widest gap is the <strong>${w.lab}</strong> band: the model said about ${w.said.toFixed(0)}% and the hour `
+      +`settled above $100 ${w.was.toFixed(0)}% of the time across ${w.n.toLocaleString()} hours. Where the outcome runs `
+      +`past the stated number, <strong>read that band as a floor, not a number.</strong>`
+    : `Every band lands within a few points of what was stated. Read the numbers as stated.`;
+  $('accRank').innerHTML=`On ranking — separating the risky hours from the safe ones — the model scores `
+    +`<strong>${(g(100).auc||0).toFixed(2)}</strong> at $100 and <strong>${(g(300).auc||0).toFixed(2)}</strong> at $300, `
+    +`where 0.5 is a coin flip and 1.0 is perfect. It beats quoting the long-run average by `
+    +`${Math.round(g(100).skill||0)}% at $100. Expected value is off by <strong>$${A.mae.toFixed(2)}</strong> an hour on average.`;
+  const c=A.cov, tgt={10:10,25:25,50:50,75:75,90:90,95:95};
+  const worst=Object.keys(tgt).map(q=>({q:+q,d:c[q]-tgt[q]})).sort((a,b)=>Math.abs(b.d)-Math.abs(a.d))[0];
+  $('accCov').innerHTML=`The bands: prices landed below P25 in ${c[25]}% of hours, below P50 in ${c[50]}%, `
+    +`below P75 in ${c[75]}%, below P90 in ${c[90]}%. `
+    + (Math.abs(worst.d)>4
+        ? `<strong>P${worst.q} is the exception</strong> — prices landed below it ${c[worst.q]}% of the time instead of ${tgt[worst.q]}%, `
+          + (worst.d>0 ? `so it understates how cheap an hour can get.` : `so it overstates how cheap an hour can get.`)
+        : `All within a few points of target.`);
+})();
+syncLabels(); render();
+</script>

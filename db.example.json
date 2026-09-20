@@ -1,0 +1,27 @@
+{
+  "_comment": "Copy to db.json and fill in. db.json is gitignored - it never leaves this machine.",
+
+  "_1": "===== FORECASTS: WindForecast / SolarForecast / LoadForecast =====",
+  "driver": "SQL Server",
+  "server": "your-sqlserver-host,1500",
+  "database": "Warehouse",
+  "trusted_connection": false,
+  "username": "",
+  "password": "",
+  "trust_server_certificate": true,
+
+  "_2": "===== COMPOSITION: omit this whole block if it is the same server =====",
+  "composition_db": {
+    "dialect": "postgres",
+    "driver": "PostgreSQL ODBC Driver(UNICODE)",
+    "server": "your-postgres-host.rds.amazonaws.com",
+    "port": 5432,
+    "database": "sandbox",
+    "username": "",
+    "password": "",
+    "sslmode": "require",
+    "composition_table": "public.REPLACE_ME"
+  },
+
+  "history_days": 760
+}

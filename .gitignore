@@ -1,0 +1,13 @@
+# local state, never published
+cache/
+refresh/
+archive/
+db.json
+aeso_key.txt
+csd_log.csv
+probe_results.json
+__pycache__/
+*.pyc
+
+# rebuild intermediates
+model/_*.pkl
