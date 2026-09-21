@@ -402,6 +402,12 @@ def pull_aeso(key, outdir, days=760):
                      f"&startHE=1&endHE=24&version=false&dataType=ATC&dataType=TTC"
                      f"&intertieOrFlowgate=BC&intertieOrFlowgate=SK&intertieOrFlowgate=MATL", True),
         ('csd_summary', f"{base}/currentsupplydemand-api/v2/csd/summary/current", True),
+        # The 122-day filed outage report. Public, no key. Each daily copy is a
+        # VINTAGE: outages get filed progressively, so comparing today's view of
+        # a future date against a later view of the same date is the only way to
+        # measure the gas adder. Archived every day for exactly that reason.
+        ('outage_90d', 'http://ets.aeso.ca/ets_web/ip/Market/Reports/'
+                       'DailyOutageReportServlet?contentType=csv', False),
         ('wind_fc',  'http://ets.aeso.ca/Market/Reports/Manual/Operations/prodweb_reports/'
                      'wind_solar_forecast/wind_rpt_longterm.csv', False),
         ('solar_fc', 'http://ets.aeso.ca/Market/Reports/Manual/Operations/prodweb_reports/'
@@ -418,7 +424,7 @@ def pull_aeso(key, outdir, days=760):
                       f"?startDate={start:%Y-%m-%d}&endDate={stop:%Y-%m-%d}", True))
         start = stop + pd.Timedelta(days=1); i += 1
     for name, url, needkey in feeds:
-        ext = 'csv' if url.endswith('.csv') else 'json'
+        ext = 'csv' if (url.endswith('.csv') or 'contentType=csv' in url) else 'json'
         dest = outdir/f'{name}.{ext}'
         try:
             body, via = fetch(url, key if needkey else None)
