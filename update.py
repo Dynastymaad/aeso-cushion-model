@@ -603,16 +603,21 @@ def score(d, seed=53):
             hf=h.dropna(subset=['cush_full'])
             if len(h)<2000 or len(hf)<500: POOL=None; continue
             POOL=build_pools(h.b.values,h.g.values,h.r7.values)
-            ERR=(hf.cush_full-hf.cush).values
+            # same shrink the grid uses, fitted on prior days only, so the
+            # calibration is learnt against the draws it will later be applied to
+            SB1,SB0=np.polyfit(hf.cush_full.values,hf.cush.values,1)
+            ERR=hf.cush.values-(SB0+SB1*hf.cush_full.values)
         if POOL is None: continue
-        sm=te.cush_full.values[:,None]-rng.choice(ERR,size=(len(te),300),replace=True)
+        sm=(SB0+SB1*te.cush_full.values)[:,None]+rng.choice(ERR,size=(len(te),300),replace=True)
         bi=np.clip(np.digitize(sm,E)-1,0,NB-1)
         rf=curve(xs,ys,sm.ravel()).reshape(sm.shape)
         for k,(ts,row) in enumerate(te.iterrows()):
             g=int(row.g)
             res=np.array([rng.choice(POOL[(int(b),g)]) for b in bi[k]])
             px=np.clip(np.expm1(np.log1p(rf[k])+res),0,999.99)
-            r={'ts':ts,'price':row.price,'cfc':row.cush_full,'g':g,'mean_px':float(px.mean())}
+            bq,oq=bid_offer(px)
+            r={'ts':ts,'price':row.price,'cfc':row.cush_full,'g':g,'mean_px':float(px.mean()),
+               'bid':bq,'offer':oq}
             for t in THR: r[f'p{t}']=float((px>t).mean())
             for q in (10,25,50,75,90,95): r[f'q{q}']=float(np.percentile(px,q))
             out.append(r)
@@ -679,37 +684,50 @@ RATIO = 3.0          # expected gain : expected loss demanded before crossing
 
 
 def bid_offer(px, r=RATIO):
-    """The price at which expected gain is r times expected loss.
+    """Bid and offer, by the QB three-scenario weighting.
 
-    Buying at X you gain when it settles above and lose when it settles below;
-    selling is the mirror. Solved on the simulated draws rather than in closed
-    form: a closed form has to assume which side of the central case the answer
-    lands on, and it is wrong exactly when the distribution is lopsided - which
-    is the only time any of this matters. Bisection needs no such assumption."""
-    lo, hi = float(px.min()), float(px.max())
-    if hi - lo < 1e-9:
-        return round(lo, 2), round(lo, 2)
+    The sheet this comes from works on three cases - Low, Base, High - with a
+    probability each. The model carries a full distribution instead, so it is
+    reduced to the same three-point shape first: the bottom quarter of the
+    draws, the middle half, and the top quarter, each represented by its own
+    average. Split by rank rather than by value so ties at $0 and at the
+    $999.99 cap cannot distort the weights, and because the quarters are exact
+    the three points reproduce the distribution's mean exactly.
 
-    def solve(side):
-        a, b = lo, hi
-        for _ in range(80):
-            m = (a + b) / 2.0
-            up = float(np.maximum(px - m, 0.0).mean())   # settles above m
-            dn = float(np.maximum(m - px, 0.0).mean())   # settles below m
-            # both arranged to decrease in m, so the same bracket works
-            d = (up - r * dn) if side == 'bid' else (r * up - dn)
-            if d > 0: a = m
-            else:     b = m
-        return round((a + b) / 2.0, 2)
+    Then, verbatim:
+        bid   = [pH*H + r*(pL*L + pB*B)] / [pH + r*(pL + pB)]
+        offer = [pL*L + pB*B + r*pH*H] / [pL + pB + r*pH]
 
-    return solve('bid'), solve('offer')
+    The bid weights the downside cases r times over, the offer weights the
+    upside case r times over, which is what pulls each away from fair value."""
+    s = np.sort(np.asarray(px, float)); n = s.size
+    if n < 8 or s[-1] - s[0] < 1e-9:
+        v = round(float(s.mean()), 2); return v, v
+    i, j = n // 4, (3 * n) // 4
+    L, B, H = float(s[:i].mean()), float(s[i:j].mean()), float(s[j:].mean())
+    pL, pB, pH = i / n, (j - i) / n, (n - j) / n
+    bid   = (pH * H + r * (pL * L + pB * B)) / (pH + r * (pL + pB))
+    offer = (pL * L + pB * B + r * pH * H) / (pL + pB + r * pH)
+    return round(bid, 2), round(offer, 2)
 
 
 def make_grid(d, CAL, HOT, hotratio, seed=71):
     end=d.index.max()
     tr7=d[d.index>end-pd.Timedelta(days=7)]
     hist=d                      # every settled hour, not a rolling year
-    err=(hist.cush_full-hist.cush).dropna().values
+    # The day-ahead cushion regresses to the mean: forecast 300 and the actual
+    # lands near 440; forecast 3,900 and it lands near 3,720. Smearing
+    # symmetrically around the forecast therefore puts weight on cushions that
+    # do not happen - too tight at the tight end, too loose at the loose end -
+    # and because the price curve is forty times steeper when tight than when
+    # loose, that error is worth $90/MWh there and -$5 at the other extreme.
+    # So smear around E[actual | forecast] instead, using the spread that is
+    # left once the drift is taken out.
+    j=hist.dropna(subset=['cush_full','cush'])
+    SB1,SB0=np.polyfit(j.cush_full.values,j.cush.values,1)
+    err=j.cush.values-(SB0+SB1*j.cush_full.values)
+    say(f"cushion shrink: actual = {SB0:+.0f} + {SB1:.3f} x forecast, "
+        f"residual sd {err.std():.0f} MW")
     XS,YS=knots(tr7.cush.values,tr7.price.values)
     bins=np.clip(np.digitize(hist.cush.values,E)-1,0,NB-1)
     POOL=build_pools(bins,hist.g.values,hist.r7.values)
@@ -721,7 +739,7 @@ def make_grid(d, CAL, HOT, hotratio, seed=71):
     rng=np.random.default_rng(seed); rows=[]
     for g in range(5):
         for c in np.arange(-1200,4401,100):
-            sm=c-rng.choice(err,size=4000)
+            sm=(SB0+SB1*c)+rng.choice(err,size=4000)
             bi=np.clip(np.digitize(sm,E)-1,0,NB-1)
             base=curve(XS,YS,sm)
             res=np.array([rng.choice(POOL[(int(b),g)]) for b in bi])
