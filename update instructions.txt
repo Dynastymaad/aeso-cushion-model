@@ -1,0 +1,6 @@
+git:
+cd ~/Documents/aeso-cushion\ model
+python update.py
+git add -A
+git commit -m "what changed"
+git push
