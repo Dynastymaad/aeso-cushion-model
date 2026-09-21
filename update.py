@@ -661,6 +661,7 @@ def score(d, seed=53):
         say(f"  >${t:<4} skill {gates[t]['skill']:>+6.1f}%   AUC {gates[t]['auc']:.3f}")
     say(f"  hourly MAE ${float((R.mean_px-R.price).abs().mean()):.2f}   "
         f"P90 coverage {100*float((R.price<=R.q90).mean()):.1f}%")
+    say("  realised gain:loss by cushion band (target "+f"{RATIO:.0f}"+":1)")
     # the reliability table the page shows: when it said X, how often did it happen
     y100=(R.price>100).astype(float); rel=[]
     for lab,lo,hi in [('under 1%',0,.01),('1–2%',.01,.02),('2–5%',.02,.05),('5–10%',.05,.10),
@@ -672,6 +673,27 @@ def score(d, seed=53):
     gates['acc']={'n':int(len(R)),'start':str(R.index.min().date()),'end':str(R.index.max().date()),
                   'rel':rel,'mae':round(float((R.mean_px-R.price).abs().mean()),2),
                   'cov':{q:round(100*float((R.price<=R[f'q{q}']).mean()),1) for q in (10,25,50,75,90,95)}}
+    # How well has the 3:1 level actually held, by cushion band? Measured on
+    # the same walk-forward hours, and shipped so the page can mark the bands
+    # where the bid or the offer has not been delivering what it promises.
+    BB=[-1e9,400,800,1200,1800,2500,1e9]
+    BL=['under 400','400-800','800-1200','1200-1800','1800-2500','2500+']
+    bo=[]
+    bnum=np.clip(np.digitize(R.cfc.values,np.array(BB))-1,0,len(BL)-1)
+    for i,lab in enumerate(BL):
+        m=bnum==i
+        if m.sum()<20: continue
+        sub=R[m]; e={'lab':lab,'lo':BB[i],'hi':BB[i+1],'n':int(m.sum())}
+        for side in ('bid','offer'):
+            if side=='bid': g_=np.maximum(sub.price-sub[side],0); l_=np.maximum(sub[side]-sub.price,0)
+            else:           g_=np.maximum(sub[side]-sub.price,0); l_=np.maximum(sub.price-sub[side],0)
+            e[side]=round(float(g_.mean()/max(l_.mean(),1e-9)),2)
+            e[side+'_net']=round(float((g_-l_).mean()),2)
+            e[side+'_win']=round(float((g_>0).mean()),3)
+        bo.append(e)
+        say(f"  {lab:>11}  n={e['n']:>5}   bid {e['bid']:>5.2f}:1   offer {e['offer']:>5.2f}:1")
+    gates['bo']={'target':RATIO,'bands':bo}
+
     hot=R[R.hot==1]
     CAL={t:Cal(R[f'p{t}'].values,(R.price>t).astype(float).values) for t in THR}
     HOT={t:Cal(hot[f'p{t}'].values,(hot.price>t).astype(float).values) for t in (300,700)}

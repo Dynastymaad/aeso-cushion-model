@@ -221,6 +221,9 @@ svg{display:block;width:100%;height:auto}
 .anac .spark{margin:9px 0 6px}
 .anac .out{border-top:1px solid var(--line);margin-top:8px;padding-top:8px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+.bo-bad{color:#b3261e!important;font-weight:700;background:rgba(179,38,30,.10)}
+.bo-soft{color:#8a5a00!important;background:rgba(214,158,46,.12)}
+.bo-thin{color:var(--ink-3)!important;font-style:italic}
 </style>
 
 <header>
@@ -447,6 +450,23 @@ const tgroup=he => he<=6?0 : he<=10?1 : he<=16?2 : he<=21?3 : 4;
 const G={};
 for(const r of D.grid){ (G[r.g] ||= []).push(r); }
 for(const k in G) G[k].sort((a,b)=>a.c-b.c);
+const BO=(D.meta.gates&&D.meta.gates.bo)?D.meta.gates.bo:null;
+function boBand(c){ if(!BO) return null;
+  for(const b of BO.bands) if(c>=b.lo && c<b.hi) return b; return null; }
+function boCls(c,side){ const b=boBand(c); if(!b) return '';
+  const r=b[side]; const t=BO.target||3;
+  if(r < t*0.50) return 'bo-bad';
+  if(r < t*0.70) return 'bo-soft';
+  if(b.n<150)    return 'bo-thin';
+  return ''; }
+function boTip(c,side){ const b=boBand(c); if(!b) return '';
+  const r=b[side], t=BO.target||3;
+  const v=r<t*0.50?'HAS NOT HELD — trust your own read here over this number'
+        :r<t*0.70?'runs light of the target — treat as indicative'
+        :b.n<150?'has held up, but on thin history'
+        :'has held up';
+  return `${side} at cushion ${b.lab}: realised ${r.toFixed(2)}:1 against a ${t}:1 target over ${b.n} hours — ${v}. `
+       + `Net $${b[side+'_net'].toFixed(2)}/MWh, won ${(b[side+'_win']*100).toFixed(0)}% of hours.`; }
 const KEYS=['q10','q25','q50','q75','q90','q95','mean','bid','offer','p50','p100','p300','p700'];
 function look(cush,g){
   const a=G[g]; const n=a.length;
@@ -584,8 +604,8 @@ function render(){
       <td class="num dim pxcol">${usd(s.q75)}</td>
       <td class="num dim pxcol">${usd(s.q90)}</td>
       <td class="num strong grp-s pxcol" title="expected value — the average outcome, the number to price a contract off">${usd(s.mean)}</td>
-      <td class="num grp-s pxcol" title="buy at or below this and expected gain is 3x expected loss">${usd(s.bid)}</td>
-      <td class="num pxcol" title="sell at or above this and expected gain is 3x expected loss">${usd(s.offer)}</td>
+      <td class="num grp-s pxcol ${boCls(s.cushion,'bid')}" title="${boTip(s.cushion,'bid')}">${usd(s.bid)}</td>
+      <td class="num pxcol ${boCls(s.cushion,'offer')}" title="${boTip(s.cushion,'offer')}">${usd(s.offer)}</td>
       <td class="num grp-s pxcol ${pcls(s.p50)}">${pctf(s.p50)}</td>
       <td class="num pxcol ${pcls(s.p100)}">${pctf(s.p100)}</td>
       <td class="num pxcol ${pcls(s.p300)}">${pctf(s.p300)}</td>
