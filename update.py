@@ -675,6 +675,36 @@ def score(d, seed=53):
 
 
 # ================================================================= 5. grid ===
+RATIO = 3.0          # expected gain : expected loss demanded before crossing
+
+
+def bid_offer(px, r=RATIO):
+    """The price at which expected gain is r times expected loss.
+
+    Buying at X you gain when it settles above and lose when it settles below;
+    selling is the mirror. Solved on the simulated draws rather than in closed
+    form: a closed form has to assume which side of the central case the answer
+    lands on, and it is wrong exactly when the distribution is lopsided - which
+    is the only time any of this matters. Bisection needs no such assumption."""
+    lo, hi = float(px.min()), float(px.max())
+    if hi - lo < 1e-9:
+        return round(lo, 2), round(lo, 2)
+
+    def solve(side):
+        a, b = lo, hi
+        for _ in range(80):
+            m = (a + b) / 2.0
+            up = float(np.maximum(px - m, 0.0).mean())   # settles above m
+            dn = float(np.maximum(m - px, 0.0).mean())   # settles below m
+            # both arranged to decrease in m, so the same bracket works
+            d = (up - r * dn) if side == 'bid' else (r * up - dn)
+            if d > 0: a = m
+            else:     b = m
+        return round((a + b) / 2.0, 2)
+
+    return solve('bid'), solve('offer')
+
+
 def make_grid(d, CAL, HOT, hotratio, seed=71):
     end=d.index.max()
     tr7=d[d.index>end-pd.Timedelta(days=7)]
@@ -699,6 +729,7 @@ def make_grid(d, CAL, HOT, hotratio, seed=71):
             r={'g':g,'c':int(c)}
             for q in (10,25,50,75,90,95): r[f'q{q}']=round(float(np.percentile(px,q)),2)
             r['mean']=round(float(px.mean()),2)
+            r['bid'],r['offer']=bid_offer(px)
             isHot=(c<900) and (g in (3,4))
             p=[float((HOT[t] if (isHot and t in HOT) else CAL[t])([float((px>t).mean())])[0]) for t in THR]
             if isHot: p[2]=min(p[2], float(np.interp(c,HX,HY,left=HY[0],right=HY[-1]))*p[1])

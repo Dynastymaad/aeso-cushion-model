@@ -308,7 +308,7 @@ svg{display:block;width:100%;height:auto}
             <th class="l">HE</th>
             <th>Load</th><th>Cogen</th><th>Comb<br>cycle</th><th>Gas<br>steam</th><th>Simple<br>cycle</th><th>Wind</th><th>Solar</th><th>ITC</th><th class="grp-s">MW before<br>simple cycle</th>
             <th class="grp-s">Cushion</th><th>Δ</th>
-            <th class="grp-s pxcol">P25</th><th class="pxcol">Likely<br>P50</th><th class="pxcol">P75</th><th class="pxcol">P90</th><th class="grp-s pxcol">Fair value<br>EV</th>
+            <th class="grp-s pxcol">P25</th><th class="pxcol">Likely<br>P50</th><th class="pxcol">P75</th><th class="pxcol">P90</th><th class="grp-s pxcol">Fair value<br>EV</th><th class="grp-s pxcol" title="buy here and expected gain is 3x expected loss">3:1<br>Bid</th><th class="pxcol" title="sell here and expected gain is 3x expected loss">3:1<br>Offer</th>
             <th class="grp-s pxcol">&gt;$50</th><th class="pxcol">&gt;$100</th><th class="pxcol">&gt;$300</th>
             <th class="l grp-s">State</th><th class="pxcol">Settled</th>
           </tr></thead>
@@ -447,7 +447,7 @@ const tgroup=he => he<=6?0 : he<=10?1 : he<=16?2 : he<=21?3 : 4;
 const G={};
 for(const r of D.grid){ (G[r.g] ||= []).push(r); }
 for(const k in G) G[k].sort((a,b)=>a.c-b.c);
-const KEYS=['q10','q25','q50','q75','q90','q95','mean','p50','p100','p300','p700'];
+const KEYS=['q10','q25','q50','q75','q90','q95','mean','bid','offer','p50','p100','p300','p700'];
 function look(cush,g){
   const a=G[g]; const n=a.length;
   if(cush<=a[0].c) return a[0];
@@ -584,6 +584,8 @@ function render(){
       <td class="num dim pxcol">${usd(s.q75)}</td>
       <td class="num dim pxcol">${usd(s.q90)}</td>
       <td class="num strong grp-s pxcol" title="expected value — the average outcome, the number to price a contract off">${usd(s.mean)}</td>
+      <td class="num grp-s pxcol" title="buy at or below this and expected gain is 3x expected loss">${usd(s.bid)}</td>
+      <td class="num pxcol" title="sell at or above this and expected gain is 3x expected loss">${usd(s.offer)}</td>
       <td class="num grp-s pxcol ${pcls(s.p50)}">${pctf(s.p50)}</td>
       <td class="num pxcol ${pcls(s.p100)}">${pctf(s.p100)}</td>
       <td class="num pxcol ${pcls(s.p300)}">${pctf(s.p300)}</td>
