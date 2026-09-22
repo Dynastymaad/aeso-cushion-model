@@ -698,6 +698,29 @@ def score(d, seed=53):
         sub=R[m]; raw=float(sub.price.sum()/max(sub.mean_px.sum(),1e-9))
         w=n/(n+400.0)
         lv.append({'lo':LB[i],'hi':LB[i+1],'k':round(1.0+w*(raw-1.0),4),'n':n})
+    # A whole day settles at the MEAN of its hours, and that average is far
+    # less dispersed than any single hour - so the same 3:1 rule sits much
+    # closer to fair value. Averaging the 24 hourly levels gives 6:1 on the
+    # bid, which is money left on the table. Solve the daily pair directly.
+    DD=R.groupby(R.index.normalize()).agg(ev=('mean_px','mean'),px=('price','mean'),
+                                          n=('price','size'))
+    DD=DD[DD.n>=23]
+    def _dm(side,target=RATIO,lo=0.0,hi=0.99):
+        for _ in range(70):
+            m=(lo+hi)/2
+            lvl=DD.ev*(1-m) if side=='bid' else DD.ev*(1+m)
+            g=np.maximum(DD.px-lvl,0) if side=='bid' else np.maximum(lvl-DD.px,0)
+            l=np.maximum(lvl-DD.px,0) if side=='bid' else np.maximum(DD.px-lvl,0)
+            if float(g.mean()/max(l.mean(),1e-9))<target: lo=m
+            else: hi=m
+        return (lo+hi)/2
+    if len(DD)>=60:
+        db,do=1-_dm('bid'),1+_dm('offer')
+    else:
+        db,do=0.72,1.28
+    gates['day']={'bid':round(float(db),3),'offer':round(float(do),3),'n':int(len(DD))}
+    say(f"  daily levels: bid = day EV x {db:.3f}, offer x {do:.3f}  ({len(DD)} full days)")
+
     gates['lvl']=lv; gates['lam']={'bid':LAMB,'offer':LAMO}
     say("  level correction by cushion: "+"  ".join(f"{x['k']:.2f}" for x in lv))
 

@@ -321,6 +321,22 @@ svg{display:block;width:100%;height:auto}
     </div>
 
     <div class="panel" style="margin-top:18px">
+      <div class="phead"><h2>By the day</h2><span class="sub">a flat round-the-clock position settles at the day's average hour</span></div>
+      <div class="tscroll"><table>
+        <thead><tr><th class="l">Day</th><th>hours</th><th class="pxcol">Typical hour<br>P50</th>
+          <th class="grp-s pxcol">Fair value<br>EV</th><th class="grp-s pxcol">3:1 Bid</th>
+          <th class="pxcol">3:1 Offer</th><th class="pxcol">Upside<br>: down</th>
+          <th class="pxcol">Settled</th></tr></thead>
+        <tbody id="dbody"></tbody>
+      </table></div>
+      <div style="padding:10px 16px 14px;color:var(--ink-3);font-size:12px">
+        The daily bid and offer are NOT the average of the 24 hourly ones. A day is 24 draws, so its
+        average is far less dispersed than any single hour and the same 3:1 rule sits much closer to
+        fair value. Averaging the hourly levels would bid you at <b>6.0:1</b> — needlessly wide.
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:18px">
       <div class="phead">
         <h2>Why this hour is where it is</h2>
         <span class="sub" id="whySub"></span>
@@ -615,6 +631,7 @@ function render(){
     </tr>`;
   }).join('');
 
+  drawDaily(rows);
   drawCushion(rows,dirty);
 
   drawWhy(rows,dirty);
@@ -1161,6 +1178,32 @@ function drawCrv(rows,dirty){
 }
 
 
+function drawDaily(rows){
+  const DM=(D.meta.gates&&D.meta.gates.day)||{bid:0.72,offer:1.28};
+  const by={};
+  for(const r of rows){ const k=r.h.dt.slice(0,10); (by[k] ||= []).push(r); }
+  let t='';
+  for(const k of Object.keys(by).sort()){
+    const g=by[k], n=g.length;
+    const ev=g.reduce((a,r)=>a+r.scen.mean,0)/n;
+    const p50=g.reduce((a,r)=>a+r.scen.q50,0)/n;
+    const q10=g.reduce((a,r)=>a+r.scen.q10,0)/n, q90=g.reduce((a,r)=>a+r.scen.q90,0)/n;
+    const opt=Math.max(q90-p50,1e-6)/Math.max(p50-q10,1e-6);
+    const st=g.filter(r=>r.h.price!=null);
+    const set=st.length? st.reduce((a,r)=>a+r.h.price,0)/st.length : null;
+    const part=n<24?`<span class="dim"> · ${n}h</span>`:'';
+    t+=`<tr><td class="l strong">${new Date(k+'T12:00:00').toLocaleDateString(undefined,
+          {weekday:'short',month:'short',day:'numeric'})}${part}</td>
+      <td class="num dim">${n}</td>
+      <td class="num pxcol">${usd(p50)}</td>
+      <td class="num strong grp-s pxcol">${usd(ev)}</td>
+      <td class="num strong grp-s pxcol">${usd(ev*DM.bid)}</td>
+      <td class="num strong pxcol">${usd(ev*DM.offer)}</td>
+      <td class="num pxcol" style="color:${opt>=3?'var(--tight)':opt>=1.8?'var(--watch)':'var(--ink-3)'}">${opt.toFixed(1)}x</td>
+      <td class="num pxcol ${set==null?'dim':''}">${set==null?'—':usd(set)}${st.length&&st.length<n?`<span class="dim"> (${st.length}h)</span>`:''}</td></tr>`;
+  }
+  $('dbody').innerHTML=t;
+}
 function drawCushion(rows,dirty){
   const W=1040,H=270,L=56,R=16,T=18,B=34,iw=W-L-R,ih=H-T-B;
   const host=$('c_cush');host.innerHTML='';const s=svg(W,H);host.appendChild(s);
