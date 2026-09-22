@@ -568,7 +568,7 @@ def main():
         pickle.dump((cal, hotcal, hotratio, gates), open(calp,'wb'))
 
     stage(5, 'grid — 285 cushion x time-of-day cells')
-    grid, tr7, pdays = make_grid(scored, cal, hotcal, hotratio)
+    grid, tr7, pdays = make_grid(scored, cal, hotcal, hotratio, gates)
 
     stage(6, 'page')
     write_page(ROOT, folder, d, scored, grid, tr7, comp, load_cor, gates, fr, itb, pdays)
@@ -615,9 +615,7 @@ def score(d, seed=53):
             g=int(row.g)
             res=np.array([rng.choice(POOL[(int(b),g)]) for b in bi[k]])
             px=np.clip(np.expm1(np.log1p(rf[k])+res),0,999.99)
-            bq,oq=bid_offer(px)
-            r={'ts':ts,'price':row.price,'cfc':row.cush_full,'g':g,'mean_px':float(px.mean()),
-               'bid':bq,'offer':oq}
+            r={'ts':ts,'price':row.price,'cfc':row.cush_full,'g':g,'mean_px':float(px.mean())}
             for t in THR: r[f'p{t}']=float((px>t).mean())
             for q in (10,25,50,75,90,95): r[f'q{q}']=float(np.percentile(px,q))
             out.append(r)
@@ -673,6 +671,36 @@ def score(d, seed=53):
     gates['acc']={'n':int(len(R)),'start':str(R.index.min().date()),'end':str(R.index.max().date()),
                   'rel':rel,'mae':round(float((R.mean_px-R.price).abs().mean()),2),
                   'cov':{q:round(100*float((R.price<=R[f'q{q}']).mean()),1) for q in (10,25,50,75,90,95)}}
+    # Clamped at zero. Solved freely it comes out NEGATIVE - with this much
+    # right skew, paying the median already earns better than 3:1, so a true
+    # 3:1 bid would sit ABOVE the most likely outcome. That is arithmetically
+    # correct and useless as a bid, so the bid is held at the median or below
+    # and simply earns more than 3:1 when the skew is steep.
+    LAMB_RAW=solve_lam(R.q10,R.q50,R.q90,R.price,'bid')
+    LAMB=max(0.0,LAMB_RAW)
+    LAMO=solve_lam(R.q10,R.q50,R.q90,R.price,'offer')
+    R['bid'],R['offer']=bid_offer_q(R.q10.values,R.q50.values,R.q90.values,LAMB,LAMO)
+    R['opt']=np.maximum(R.q90-R.q50,1e-6)/np.maximum(R.q50-R.q10,1e-6)
+    say(f"  bid/offer lambdas for {RATIO:.0f}:1 -> bid {LAMB:+.3f}"
+        f"{' (clamped from '+format(LAMB_RAW,'+.3f')+')' if LAMB_RAW<0 else ''}"
+        f"  offer {LAMO:+.3f}   (lam 0 = at the median)")
+
+    # LEVEL CORRECTION. The EV runs a few percent rich, much more so in some
+    # cushion bands. k is what settled over what was predicted, by band,
+    # shrunk toward 1 so a thin band cannot swing it. It scales the grid's
+    # PRICE outputs only - the probabilities keep their own isotonic
+    # calibration, which is already good and was fitted on the unscaled draws.
+    LB=[-1e9,400,800,1200,1800,2500,1e9]; lv=[]
+    lnum=np.clip(np.digitize(R.cfc.values,np.array(LB))-1,0,len(LB)-2)
+    for i in range(len(LB)-1):
+        m=lnum==i; n=int(m.sum())
+        if n<40: lv.append({'lo':LB[i],'hi':LB[i+1],'k':1.0,'n':n}); continue
+        sub=R[m]; raw=float(sub.price.sum()/max(sub.mean_px.sum(),1e-9))
+        w=n/(n+400.0)
+        lv.append({'lo':LB[i],'hi':LB[i+1],'k':round(1.0+w*(raw-1.0),4),'n':n})
+    gates['lvl']=lv; gates['lam']={'bid':LAMB,'offer':LAMO}
+    say("  level correction by cushion: "+"  ".join(f"{x['k']:.2f}" for x in lv))
+
     # How well has the 3:1 level actually held, by cushion band? Measured on
     # the same walk-forward hours, and shipped so the page can mark the bands
     # where the bid or the offer has not been delivering what it promises.
@@ -705,6 +733,37 @@ def score(d, seed=53):
 RATIO = 3.0          # expected gain : expected loss demanded before crossing
 
 
+def bid_offer_q(q10, q50, q90, lam_b, lam_o):
+    """Bid and offer anchored on the median, each side scaled by its own tail.
+
+        down = P50 - P10        how far the downside runs
+        up   = P90 - P50        how far the upside runs
+        bid   = P50 - lam_b * down
+        offer = P50 + lam_o * up
+
+    No skew term is needed: up and down already carry it, so a lopsided hour
+    widens on the lopsided side by itself. The two lambdas are not assumed -
+    score() solves them each run so the realised gain:loss lands on RATIO."""
+    down = np.maximum(q50 - q10, 1e-6); up = np.maximum(q90 - q50, 1e-6)
+    return np.maximum(q50 - lam_b * down, 0.0), q50 + lam_o * up
+
+
+def solve_lam(q10, q50, q90, price, side, target=RATIO, lo=-3.0, hi=4.0):
+    """The lambda that would have delivered `target` on these hours."""
+    q10, q50, q90, price = map(np.asarray, (q10, q50, q90, price))
+    def ratio(m):
+        lvl = (np.maximum(q50 - m*np.maximum(q50-q10,1e-6), 0.0) if side == 'bid'
+               else q50 + m*np.maximum(q90-q50,1e-6))
+        g = np.maximum(price-lvl, 0) if side == 'bid' else np.maximum(lvl-price, 0)
+        l = np.maximum(lvl-price, 0) if side == 'bid' else np.maximum(price-lvl, 0)
+        return float(g.mean()/max(l.mean(), 1e-9))
+    for _ in range(80):
+        m = (lo+hi)/2
+        if ratio(m) < target: lo = m
+        else: hi = m
+    return round((lo+hi)/2, 4)
+
+
 def bid_offer(px, r=RATIO):
     """Bid and offer, by the QB three-scenario weighting.
 
@@ -733,7 +792,7 @@ def bid_offer(px, r=RATIO):
     return round(bid, 2), round(offer, 2)
 
 
-def make_grid(d, CAL, HOT, hotratio, seed=71):
+def make_grid(d, CAL, HOT, hotratio, gates=None, seed=71):
     end=d.index.max()
     tr7=d[d.index>end-pd.Timedelta(days=7)]
     hist=d                      # every settled hour, not a rolling year
@@ -758,6 +817,12 @@ def make_grid(d, CAL, HOT, hotratio, seed=71):
     say(f"curve {tr7.index.min():%Y-%m-%d} to {tr7.index.max():%Y-%m-%d} "
         f"({len(tr7)} hrs, mean ${tr7.price.mean():.2f}); "
         f"pool {len(hist):,} hrs over {pdays} days (all history)")
+    LV=(gates or {}).get('lvl') or []
+    LAM=(gates or {}).get('lam') or {'bid':0.0,'offer':0.6}
+    def klvl(c):
+        for x in LV:
+            if x['lo']<=c<x['hi']: return float(x['k'])
+        return 1.0
     rng=np.random.default_rng(seed); rows=[]
     for g in range(5):
         for c in np.arange(-1200,4401,100):
@@ -767,9 +832,17 @@ def make_grid(d, CAL, HOT, hotratio, seed=71):
             res=np.array([rng.choice(POOL[(int(b),g)]) for b in bi])
             px=np.clip(np.expm1(np.log1p(base)+res),0,999.99)
             r={'g':g,'c':int(c)}
-            for q in (10,25,50,75,90,95): r[f'q{q}']=round(float(np.percentile(px,q)),2)
-            r['mean']=round(float(px.mean()),2)
-            r['bid'],r['offer']=bid_offer(px)
+            # probabilities below come from the UNSCALED draws, which is the
+            # basis their calibration was fitted on. Prices use the corrected
+            # ones.
+            pxl=px*klvl(c)
+            for q in (10,25,50,75,90,95): r[f'q{q}']=round(float(np.percentile(pxl,q)),2)
+            r['mean']=round(float(pxl.mean()),2)
+            _b,_o=bid_offer_q(*[float(np.percentile(pxl,q)) for q in (10,50,90)],
+                              LAM['bid'],LAM['offer'])
+            r['bid'],r['offer']=round(float(_b),2),round(float(_o),2)
+            _q10,_q50,_q90=[float(np.percentile(pxl,q)) for q in (10,50,90)]
+            r['opt']=round(max(_q90-_q50,1e-6)/max(_q50-_q10,1e-6),2)
             isHot=(c<900) and (g in (3,4))
             p=[float((HOT[t] if (isHot and t in HOT) else CAL[t])([float((px>t).mean())])[0]) for t in THR]
             if isHot: p[2]=min(p[2], float(np.interp(c,HX,HY,left=HY[0],right=HY[-1]))*p[1])
