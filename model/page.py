@@ -114,6 +114,73 @@ def frame(root, folder, comp, say):
     return f, itb
 
 
+def forward_table(root, say):
+    """Where each forward contract is trading inside its own history.
+
+    Two percentiles, because they answer different questions. The RANGE one is
+    (price - low) / (high - low): where it sits between its extremes, which is
+    what the QB sheet shows. It is sensitive to a single bad print - several
+    2027 strips carry a 68.00 high from one thin day when they first listed.
+    The RANK one is the share of trade dates that settled at or below today,
+    which no single outlier can move. Lead with rank; keep range for comparison.
+
+    A 90-day rank is carried too: a contract can be cheap against its whole
+    life and rich against the last quarter, and that gap is worth seeing."""
+    fp = root/'cache'/'forward_px.csv'
+    if not fp.exists():
+        return None
+    try:
+        f = pd.read_csv(fp)
+        f.columns = [c.lower() for c in f.columns]
+        f['effectivedate'] = pd.to_datetime(f.effectivedate)
+        f['strip'] = pd.to_datetime(f.strip)
+        P = f.pivot_table(index='effectivedate', columns='strip', values='price').sort_index()
+    except Exception as e:
+        say(f"forward curve skipped - {str(e)[:90]}")
+        return None
+    if P.empty: return None
+    last = P.index.max()
+    mo = sorted(c for c in P.columns if c > last)
+    if not mo: return None
+
+    def block(series, label, kind, sort):
+        s = series.dropna()
+        if len(s) < 30: return None
+        cur, lo, hi = float(s.iloc[-1]), float(s.min()), float(s.max())
+        t90 = s.tail(90)
+        return {'lab': label, 'kind': kind, 'sort': sort,
+                'px': round(cur, 2), 'lo': round(lo, 2), 'hi': round(hi, 2),
+                'rng': round((cur-lo)/(hi-lo), 3) if hi > lo else 0.5,
+                'rank': round(float((s <= cur).mean()), 3),
+                'r90': round(float((t90 <= cur).mean()), 3) if len(t90) >= 30 else None,
+                'n': int(len(s))}
+
+    rows = []
+    for c in mo[:18]:
+        b = block(P[c], c.strftime('%b %Y'), 'month', c.strftime('%Y%m'))
+        if b: rows.append(b)
+    Q, C = {}, {}
+    for c in mo:
+        Q.setdefault((c.year, (c.month-1)//3+1), []).append(c)
+        C.setdefault(c.year, []).append(c)
+    for (y, q), cs in sorted(Q.items()):
+        if len(cs) != 3: continue
+        # Years quoted only as a calendar carry the same price in all twelve
+        # months, so their four quarters would be four identical rows. Skip
+        # those - the calendar line already says it.
+        sub = P[cs].dropna(how='all')
+        if len(sub) and float(sub.std(axis=1).max() or 0) < 0.01: continue
+        b = block(P[cs].mean(axis=1), f'Q{q} {y}', 'quarter', f'{y}{q}')
+        if b: rows.append(b)
+    for y, cs in sorted(C.items()):
+        if len(cs) == 12:
+            b = block(P[cs].mean(axis=1), f'CAL {y}', 'calendar', str(y))
+            if b: rows.append(b)
+    say(f"forward curve: {len(rows)} contracts priced, as of {last:%Y-%m-%d}")
+    return {'asof': str(last.date()), 'rows': rows,
+            'n_dates': int(len(P)), 'from': str(P.index.min().date())}
+
+
 def build(root, folder, d, scored, grid, tr7, comp, load_cor, gates, say, f=None, itb=None, pdays=365):
     if f is None or itb is None: f, itb = frame(root, folder, comp, say)
     hours=[]
@@ -181,7 +248,8 @@ def build(root, folder, d, scored, grid, tr7, comp, load_cor, gates, say, f=None
           'norm_start':str(dr.index.min().date()),'norm_end':str(dr.index.max().date()),
           'bundle_built':str(pd.Timestamp.now())[:10],'bundle_age_days':0,
           'gates':{str(k):v for k,v in gates.items()}}
-    payload={'hours':hours,'grid':grid,'itbands':itb,'meta':meta,'bands':bands,
+    fwd=forward_table(root, say)
+    payload={'hours':hours,'grid':grid,'itbands':itb,'meta':meta,'fwd':fwd,'bands':bands,
              'norm':norm,'analog':analog,'itp10':itp10}
     tpl=(root/'model'/'template.html').read_text(encoding='utf-8')
     out=root/'docs'/'index.html'; out.parent.mkdir(exist_ok=True)

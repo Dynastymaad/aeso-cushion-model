@@ -336,6 +336,26 @@ svg{display:block;width:100%;height:auto}
       </div>
     </div>
 
+
+    <div class="panel" id="fwdPanel" style="margin-top:18px;display:none">
+      <div class="phead"><h2>Forward contracts</h2><span class="sub" id="fwdSub"></span></div>
+      <div class="tscroll"><table>
+        <thead><tr><th class="l">Contract</th><th class="pxcol">Price</th>
+          <th class="pxcol">Low</th><th class="pxcol">High</th>
+          <th class="grp-s pxcol" title="share of trade dates that settled at or below today - no single print can move it">Percentile<br>all history</th>
+          <th class="pxcol" title="same, over the last 90 trade dates">Last<br>90d</th>
+          <th class="pxcol" title="(price - low) / (high - low) - the QB measure. One thin print can distort it.">In its<br>range</th>
+          <th style="width:150px"></th></tr></thead>
+        <tbody id="fbody"></tbody>
+      </table></div>
+      <div style="padding:10px 16px 14px;color:var(--ink-3);font-size:12px">
+        Percentile is against the contract's <b>own</b> trading history, not against a model.
+        Low means it is cheap relative to everywhere it has traded; high means rich. The
+        <b>all history</b> column is the robust one — the <b>in its range</b> column is the QB
+        measure and a single thin print at listing can distort it, which is why several 2027
+        strips carry the same high.
+      </div>
+    </div>
     <div class="panel" style="margin-top:18px">
       <div class="phead">
         <h2>Why this hour is where it is</h2>
@@ -631,6 +651,7 @@ function render(){
     </tr>`;
   }).join('');
 
+  drawFwd();
   drawDaily(rows);
   drawCushion(rows,dirty);
 
@@ -1178,6 +1199,30 @@ function drawCrv(rows,dirty){
 }
 
 
+function drawFwd(){
+  const F=D.fwd; if(!F||!F.rows||!F.rows.length) return;
+  $('fwdPanel').style.display='';
+  $('fwdSub').textContent=`as of ${F.asof} · ${F.n_dates} trade dates back to ${F.from}`;
+  const pc=v=>v==null?'—':`${(v*100).toFixed(0)}%`;
+  const col=v=>v==null?'var(--ink-3)':v<=0.20?'var(--good,#1a7f37)':v>=0.80?'var(--tight)':'var(--ink-2)';
+  let t='',kind='';
+  for(const r of F.rows){
+    if(r.kind!==kind){ kind=r.kind;
+      t+=`<tr><td colspan="8" class="l" style="padding-top:12px;color:var(--ink-3);
+           font-size:11px;letter-spacing:.06em;text-transform:uppercase">${kind}s</td></tr>`; }
+    const w=Math.max(0,Math.min(100,(r.rank||0)*100));
+    t+=`<tr><td class="l strong">${r.lab}</td>
+      <td class="num strong pxcol">${usd(r.px)}</td>
+      <td class="num dim pxcol">${usd(r.lo)}</td>
+      <td class="num dim pxcol">${usd(r.hi)}</td>
+      <td class="num strong grp-s pxcol" style="color:${col(r.rank)}">${pc(r.rank)}</td>
+      <td class="num pxcol" style="color:${col(r.r90)}">${pc(r.r90)}</td>
+      <td class="num dim pxcol">${pc(r.rng)}</td>
+      <td><div style="height:8px;background:var(--line);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${w}%;background:${col(r.rank)}"></div></div></td></tr>`;
+  }
+  $('fbody').innerHTML=t;
+}
 function drawDaily(rows){
   const DM=(D.meta.gates&&D.meta.gates.day)||{bid:0.72,offer:1.28};
   const by={};
