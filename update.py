@@ -249,6 +249,19 @@ def pull_sql(cfg, days):
             df.to_csv(CACHE/f'{name}.csv', index=False)
             say(f"{name:<13} {len(df):>9,} rows  ({time.time()-t0:.0f}s)")
             out[name] = df
+        # Forward curve. Not required by the model - if the table is not there
+        # or is named differently, say so and carry on rather than fail the run.
+        try:
+            q = (ROOT/'sql'/'50_forward_prices.sql').read_text().replace('{DAYS}','500')
+            t0 = time.time()
+            df = pd.read_sql(q, cn)
+            df.to_csv(CACHE/'forward_px.csv', index=False)
+            say(f"{'forward_px':<13} {len(df):>9,} rows  ({time.time()-t0:.0f}s)"
+                f"  {df.EffectiveDate.min()} to {df.EffectiveDate.max()}"
+                if len(df) else f"{'forward_px':<13} no rows returned")
+            out['forward_px'] = df
+        except Exception as e:
+            say(f"forward_px    skipped - {str(e).splitlines()[0][:110]}")
 
     # ---- composition -----------------------------------------------------
     cc = comp_cfg(cfg)
@@ -276,12 +289,17 @@ def pull_sql(cfg, days):
 
 def load_cache():
     need = ['composition','wind_fc','solar_fc','load_fc']
+    opt  = ['forward_px']
     miss = [n for n in need if not (CACHE/f'{n}.csv').exists()]
     if miss: raise SystemExit(f"cache/ is missing: {', '.join(m+'.csv' for m in miss)}")
     out = {}
     for n in need:
         out[n] = pd.read_csv(CACHE/f'{n}.csv')
         say(f"{n:<13} {len(out[n]):>9,} rows  (cached)")
+    for n in opt:
+        if (CACHE/f'{n}.csv').exists():
+            out[n] = pd.read_csv(CACHE/f'{n}.csv')
+            say(f"{n:<13} {len(out[n]):>9,} rows  (cached)")
     return out
 
 
