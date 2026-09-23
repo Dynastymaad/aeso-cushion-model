@@ -89,25 +89,67 @@ def frame(root, folder, comp, say):
     f=_feeds(folder)
     f=f.dropna(subset=['cc','sc','cogen','gfs','bio','load','wind','solar'])
     f['internal']=f.gas+f.bio+f.wind+f.solar
-    it=np.array([float(np.interp(v,IX,IY)) for v in (f.internal-f['load']-125.0)])
-    if f['imp'].notna().any():
-        hi=f['imp'].to_numpy(float); lo=-f['exp'].to_numpy(float)
-        cap=np.where(np.isfinite(hi),np.minimum(it,hi),it)
-        cap=np.where(np.isfinite(lo),np.maximum(cap,lo),cap)
-        n=int((np.abs(cap-it)>1).sum())
-        if n: say(f"intertie assumption capped at published ATC on {n} hours")
-        it=cap
+    curve=np.array([float(np.interp(v,IX,IY)) for v in (f.internal-f['load']-125.0)])
+    f['itcurve']=curve
+    it=curve.copy()
     f['it']=it
     # On hours that have already settled, what actually flowed beats any rule.
     # net_imports_actual_scheduled is the composition table's observed
     # interchange; it only exists for the past, so this touches ACTUAL hours
     # only and leaves every forecast hour on the assumption.
+    seen=pd.Series(False,index=f.index)
     if comp is not None and 'net_imports_actual_scheduled' in comp.columns:
         ni=pd.to_numeric(comp['net_imports_actual_scheduled'],errors='coerce').reindex(f.index)
         m=ni.notna()&f['price'].notna()
+        seen=m
         if m.any():
             f.loc[m,'it']=ni[m]
             say(f"observed interchange used on {int(m.sum())} settled hours")
+
+    # Carry today's interchange miss forward.
+    #
+    # The curve above answers "what does an hour this tight normally import?".
+    # It does not know that Mid-C moved this morning, or that BC is running a
+    # different pattern today. The gap between what actually flowed and what
+    # the curve expected is large (sd ~339 MW) and decays slowly - 0.90 of it
+    # survives an hour, 0.53 a full day - so the last few settled hours carry
+    # real information about the hours still ahead. Out of sample this cuts
+    # hourly intertie error from 280 to 201 MW.
+    cf=root/'model'/'itcarry.json'
+    # only hours whose interchange we actually observed tell us anything
+    settled=seen
+    if cf.exists() and settled.any():
+        try:
+            cc=json.loads(cf.read_text())
+            resid=(f['it']-f['itcurve'])[settled]
+            recent=float(resid.iloc[-int(cc.get('window_hours',6)):].mean())
+            last=f.index[settled][-1]
+            fut=~settled
+            if fut.any() and np.isfinite(recent):
+                ah=(f.index[fut]-last).total_seconds()/3600.0
+                sl=np.interp(ah,cc['hours'],cc['slope'],
+                             left=cc['slope'][0],right=cc['slope'][-1])
+                f.loc[fut,'it']=f.loc[fut,'itcurve']+sl*recent
+                say(f"intertie carry {recent:+.0f} MW from the last "
+                    f"{cc.get('window_hours',6)} settled hours, decayed over "
+                    f"{int(fut.sum())} forward hours")
+        except Exception as e:
+            say(f"intertie carry skipped ({e})")
+
+    # Whatever the assumption ends up being, it cannot exceed what the wires
+    # can carry. Published ATC caps the forward hours only - a settled hour is
+    # what it is.
+    if f['imp'].notna().any():
+        fut=(~settled).to_numpy()
+        hi=f['imp'].to_numpy(float); lo=-f['exp'].to_numpy(float)
+        cur=f['it'].to_numpy(float)
+        cap=np.where(np.isfinite(hi),np.minimum(cur,hi),cur)
+        cap=np.where(np.isfinite(lo),np.maximum(cap,lo),cap)
+        cap=np.where(fut,cap,cur)
+        n=int((np.abs(cap-cur)>1).sum())
+        if n: say(f"intertie assumption capped at published ATC on {n} hours")
+        f['it']=cap
+
     f['cush']=f.internal-(f['load']-f.it)
     f['he']=f.index.hour+1
     f['g']=f.he.map(lambda h: 0 if h<=6 else 1 if h<=10 else 2 if h<=16 else 3 if h<=21 else 4)
