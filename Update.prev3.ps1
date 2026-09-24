@@ -19,16 +19,6 @@ $flags = @()
 if ($FromCache) { $flags += '--from-cache' }
 if ($SkipScore) { $flags += '--skip-score' }
 
-# Weather top-up for the like-day panel (cache\wx_hourly.csv). Deliberately
-# non-fatal: if the pull fails the panel falls back to the weather it already
-# has and the rest of the refresh carries on exactly as before.
-if (-not $FromCache) {
-    python wx.py
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "`nwx.py failed - the like-day panel will use the weather it already had." -ForegroundColor Yellow
-    }
-}
-
 python update.py @flags
 if ($LASTEXITCODE -ne 0) { Write-Error "update.py failed - nothing was published."; exit 1 }
 

@@ -291,22 +291,8 @@ def build(root, folder, d, scored, grid, tr7, comp, load_cor, gates, say, f=None
           'bundle_built':str(pd.Timestamp.now())[:10],'bundle_age_days':0,
           'gates':{str(k):v for k,v in gates.items()}}
     fwd=forward_table(root, say)
-    # Weather-based like-day panel. Deliberately guarded: it depends on a file
-    # (cache/wx_hourly.csv) that the rest of the model does not need, so if it
-    # is absent or anything in it misbehaves the panel hides itself and every
-    # other panel on the page is untouched.
-    likeday=None
-    try:
-        import likeday as _ld
-        lbd={}
-        for day,g in hf.groupby('day'):
-            v={int(r.he)-1: float(r['load']) for _,r in g.iterrows()}
-            lbd[str(pd.Timestamp(day).date())]=[v.get(i) for i in range(24)]
-        likeday=_ld.build(root, loads_by_day=lbd, say=say)
-    except Exception as e:
-        say(f"  like-day panel skipped - {type(e).__name__}: {e}")
     payload={'hours':hours,'grid':grid,'itbands':itb,'meta':meta,'fwd':fwd,'bands':bands,
-             'norm':norm,'analog':analog,'itp10':itp10,'likeday':likeday}
+             'norm':norm,'analog':analog,'itp10':itp10}
     tpl=(root/'model'/'template.html').read_text(encoding='utf-8')
     out=root/'docs'/'index.html'; out.parent.mkdir(exist_ok=True)
     out.write_text(tpl.replace('__DATA__',json.dumps(payload,separators=(',',':'))),encoding='utf-8')

@@ -220,18 +220,6 @@ svg{display:block;width:100%;height:auto}
 .anac .kv b{color:var(--ink);font-weight:600}
 .anac .spark{margin:9px 0 6px}
 .anac .out{border-top:1px solid var(--line);margin-top:8px;padding-top:8px}
-.ldwrap{padding:12px 16px 2px}
-.ldkey{display:flex;flex-wrap:wrap;gap:14px;font-size:11.5px;color:var(--ink-2);margin:6px 0 2px}
-.ldkey span{display:inline-flex;align-items:center;gap:6px}
-.ldkey i{width:16px;height:0;border-top:2.6px solid;border-radius:2px}
-.lddt{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:9px 0 4px}
-.lddt div{background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:5px 7px}
-.lddt .l{font-size:9.5px;letter-spacing:.055em;text-transform:uppercase;color:var(--ink-3)}
-.lddt .v{font-size:13px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
-.lddt .u{font-size:10px;color:var(--ink-3)}
-.ldv{border-top:1px solid var(--line);margin-top:9px;padding-top:9px;font-size:12.5px;color:var(--ink-2)}
-.ldv b{font-weight:600}
-.ldhi{color:var(--tight)} .ldlo{color:var(--s-base)} .ldmid{color:var(--ink-2)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 .bo-bad{color:#b3261e!important;font-weight:700;background:rgba(179,38,30,.10)}
 .bo-soft{color:#8a5a00!important;background:rgba(214,158,46,.12)}
@@ -386,19 +374,6 @@ svg{display:block;width:100%;height:auto}
       </div>
       <div id="anaBody" style="padding:14px 16px 4px"></div>
       <div class="verdict" id="anaText"></div>
-    </div>
-
-    <div class="panel" id="ldPanel" style="margin-top:18px;display:none">
-      <div class="phead">
-        <h2>Days with weather like today's</h2>
-        <span class="sub" id="ldSub"></span>
-      </div>
-      <div class="ldwrap">
-        <div id="c_ld"></div>
-        <div class="ldkey" id="ldKey"></div>
-      </div>
-      <div id="ldBody" style="padding:10px 16px 4px"></div>
-      <div class="verdict" id="ldText"></div>
     </div>
 
     <div class="panel" style="margin-top:18px">
@@ -683,7 +658,6 @@ function render(){
   drawWhy(rows,dirty);
 
   drawFund(rows); drawAna(rows); drawCrv(rows,dirty); drawPrice(rows); drawProb(rows,dirty);
-  if(!ldDrawn){ try{ drawLike(); }catch(e){ console.warn('like-day panel:',e); } }
   drawFund(rows);
 }
 
@@ -1144,124 +1118,10 @@ function drawAna(rows){
       ${anyBig?`<strong>At least one of them had an hour over $300.</strong> A day can average something ordinary and still contain an hour that does real damage — read the worst-hour row, not just the average.`:''}</p>
     <p class="warn">How the matching works, and what it cannot do. Days are compared on evening cushion,
       evening wind, minimum cushion, peak and average load, solar and gas availability, with evening
-      tightness weighted hardest and a small penalty for being in the wrong season. This panel has no weather in it, so
-      <strong>load stands in for weather</strong> here — in Alberta load is largely a temperature
-      response, which makes it a fair proxy. The panel below it does the opposite: it matches on
-      weather alone and then shows you what load did. Three matches is a
+      tightness weighted hardest and a small penalty for being in the wrong season. There is no
+      temperature archive, so <strong>load stands in for weather</strong> — in Alberta load is largely a
+      temperature response, which makes it a fair proxy rather than a missing input. Three matches is a
       sample of three: treat them as anecdotes that put a range around the model, never as a forecast.</p>`;
-}
-
-/* ---- days with weather like today's -------------------------------------
-   Matched on temperature, wind, radiation and cloud only. Load is kept out of
-   the distance on purpose: load is the answer we are looking for, so putting
-   it in the question would make every match circular.
-   Each variable is z-scored against its own two-year history before anything
-   is squared, then the four are averaged as equals.                        */
-let ldDrawn=false;
-function drawLike(){
-  const L=D.likeday;
-  if(!L||!L.matches||!L.matches.length) return;
-  const P=$('ldPanel'); P.style.display='';
-  const T=L.today, C=['var(--s-scen)','var(--ok)','var(--beyond)'];
-
-  $('ldSub').textContent=`${L.ndays.toLocaleString('en-CA')} days searched, `
-    +`${L.span[0]} to ${L.span[1]} — matched on weather only, never on load`;
-
-  // ---- one chart, today's load against each like day's -------------------
-  const W=920,H=250,Lm=52,R=14,Tm=12,B=26,iw=W-Lm-R,ih=H-Tm-B;
-  const series=[{v:T.load,c:'var(--ink)',w:2.8,lab:'Today'}]
-    .concat(L.matches.map((m,i)=>({v:m.load,c:C[i],w:2,lab:m.d})));
-  const all=series.flatMap(s=>(s.v||[])).filter(x=>x!=null&&isFinite(x));
-  if(all.length){
-    let mn=Math.min(...all), mx=Math.max(...all);
-    const pad=(mx-mn)*0.12||200; mn-=pad; mx+=pad;
-    const X=i=>Lm+i*iw/23, Y=x=>Tm+ih-(x-mn)/(mx-mn)*ih;
-    let g='';
-    for(let k=0;k<=4;k++){ const t=mn+(mx-mn)*k/4;
-      g+=`<line x1="${Lm}" x2="${W-R}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}" stroke="var(--line)" stroke-width="1"/>`
-        +`<text x="${Lm-7}" y="${(Y(t)+3.5).toFixed(1)}" font-size="9.5" text-anchor="end" fill="var(--ink-3)" font-family="IBM Plex Mono,monospace">${Math.round(t).toLocaleString('en-CA')}</text>`;}
-    for(let h=0;h<24;h+=3)
-      g+=`<text x="${X(h).toFixed(1)}" y="${H-7}" font-size="9.5" text-anchor="middle" fill="var(--ink-3)" font-family="IBM Plex Mono,monospace">HE${h+1}</text>`;
-    const e1=X(16),e2=X(20);
-    g+=`<rect x="${e1.toFixed(1)}" y="${Tm}" width="${(e2-e1).toFixed(1)}" height="${ih}" fill="var(--ink)" fill-opacity=".045"/>`;
-    series.forEach(s=>{
-      if(!s.v) return;
-      let d='',open=false;
-      s.v.forEach((x,i)=>{ if(x==null||!isFinite(x)){open=false;return;}
-        d+=`${open?'L':'M'}${X(i).toFixed(1)} ${Y(x).toFixed(1)} `; open=true;});
-      if(d) g+=`<path d="${d.trim()}" fill="none" stroke="${s.c}" stroke-width="${s.w}" stroke-linejoin="round" stroke-linecap="round"/>`;});
-    $('c_ld').innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img"
-      aria-label="Alberta load through the day, today against the three nearest weather days">${g}</svg>`;
-    $('ldKey').innerHTML=series.map(s=>
-      `<span><i style="border-color:${s.c}"></i>${s.lab}</span>`).join('')
-      +`<span style="color:var(--ink-3)">shaded strip is HE17–21</span>`;
-  }
-
-  // ---- one card per match -------------------------------------------------
-  const dnum=(x,u,dp)=>`${x>0?'+':''}${x.toFixed(dp)}${u}`;
-  $('ldBody').innerHTML=`<div class="ana">`+L.matches.map((m,i)=>{
-    const dd=new Date(m.d+'T12:00:00');
-    const vs=m.vs, pc=m.vspc;
-    let verdict;
-    if(vs==null){ verdict='Load for that day is not in the history.'; }
-    else{
-      const cls=Math.abs(pc)<1.5?'ldmid':(vs>0?'ldhi':'ldlo');
-      const word=Math.abs(pc)<1.5?'about normal':(vs>0?'ABOVE normal':'BELOW normal');
-      verdict=`Load ran <b class="${cls}">${word}</b>`
-        +(Math.abs(pc)<1.5?'':` — <b class="${cls}">${vs>0?'+':''}${vs.toLocaleString('en-CA')} MW (${pc>0?'+':''}${pc.toFixed(1)}%)</b>`)
-        +` against a normal ${dd.toLocaleDateString('en-CA',{weekday:'long'})} that time of year (${mw(m.norm)} MW).`;
-    }
-    return `<div class="anac" style="border-left:3px solid ${C[i]}">
-      <h4>${dd.toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric',year:'numeric'})}</h4>
-      <div class="when">${m.back.toLocaleString('en-CA')} days ago · closeness ${m.score.toFixed(2)} — lower is nearer</div>
-      <div class="lddt">
-        <div><div class="l">Temp</div><div class="v">${dnum(m.dt,'',1)}</div><div class="u">°C vs today</div></div>
-        <div><div class="l">Wind</div><div class="v">${dnum(m.dw,'',1)}</div><div class="u">km/h vs today</div></div>
-        <div><div class="l">Radiation</div><div class="v">${dnum(m.dr,'',2)}</div><div class="u">kWh/m² vs today</div></div>
-        <div><div class="l">Cloud</div><div class="v">${dnum(m.dc,'',0)}</div><div class="u">pts vs today</div></div>
-      </div>
-      <div class="kv"><span>That day's weather</span><b>${m.tmean}°C · ${m.wmean} km/h · ${m.cmean}% cloud</b></div>
-      <div class="kv"><span>Average load</span><b>${mw(m.lmean)} MW</b></div>
-      <div class="kv"><span>Peak load</span><b>${mw(m.lpk)} MW</b></div>
-      <div class="ldv">${verdict}</div>
-      ${m.px?`<div class="out">
-        <div class="kv"><span>What it settled</span><b>${usd(m.px.avg)}</b></div>
-        <div class="kv"><span>Worst hour</span><b style="color:${m.px.max>=300?'var(--tight)':'var(--ink)'}">${usd(m.px.max)}</b></div>
-        <div class="kv"><span>Hours over $100</span><b>${m.px.n100}</b></div></div>`:''}
-    </div>`;}).join('')+`</div>`;
-
-  // ---- what it means -------------------------------------------------------
-  const withLoad=L.matches.filter(m=>m.vs!=null);
-  const above=withLoad.filter(m=>m.vspc>1.5).length, below=withLoad.filter(m=>m.vspc<-1.5).length;
-  let read;
-  if(!withLoad.length) read='None of the three has settled load behind it yet.';
-  else if(above===withLoad.length) read=`All ${withLoad.length} ran <strong>above</strong> normal. Weather like today's has been pulling load up.`;
-  else if(below===withLoad.length) read=`All ${withLoad.length} ran <strong>below</strong> normal. Weather like today's has been holding load down.`;
-  else read=`They disagree — some above normal, some below. Weather like today's has not reliably moved load either way, so do not lean on it.`;
-  const tvs = (T.vs==null)?'':` Today is tracking <strong>${T.vs>0?'+':''}${T.vs.toLocaleString('en-CA')} MW</strong> against its own normal of ${mw(T.norm)} MW${T.partial?' (part of today is still AESO forecast)':''}.`;
-
-  $('ldText').innerHTML=`
-    <p class="lede">Today: <strong>${T.tmean}°C</strong> average, <strong>${T.wmean} km/h</strong> wind at hub height,
-      <strong>${T.rtot} kWh/m²</strong> of radiation, <strong>${T.cmean}%</strong> cloud. ${read}${tvs}</p>
-    <p><strong>How the match is made.</strong> Every day in the last two years is compared with today on four
-      things and nothing else: temperature, wind speed at 100 m, shortwave radiation and cloud cover, each as a
-      24-hour shape. Each variable is put on a common scale first — z-scored against its own two years of
-      history — because otherwise cloud, which runs 0 to 100, would drown out wind, which runs 0 to 50, purely
-      because of the units. The gap is squared hour by hour, rooted, and the four are averaged as equals.
-      Zero would be identical weather.</p>
-    <p><strong>Why load is not in the match.</strong> Load is the thing we are trying to learn about. If it were
-      part of the distance, the three nearest days would be days that already had today's load, and telling you
-      their load was normal would be telling you nothing. Keeping it out is what makes the last line of each
-      card worth reading.</p>
-    <p><strong>What "normal" means.</strong> Not a recent average — a seasonal curve fitted across the whole two
-      years, with Saturday and Sunday carrying their own level. Alberta runs roughly 260 MW lighter on a
-      weekend, so without that a Saturday match would always come back looking light when all that happened
-      is that it was a Saturday.</p>
-    <p class="warn">The last ${L.excluded} days are excluded from the search. Weather runs in spells, so the three
-      nearest days would otherwise almost always be this week — which you already remember, and whose price has
-      barely settled. And three matches is a sample of three: they put a range around what weather like this has
-      done to load, they are not a forecast.</p>`;
-  ldDrawn=true;
 }
 
 function drawCrv(rows,dirty){

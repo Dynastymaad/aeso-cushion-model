@@ -199,7 +199,6 @@ the days the read is least reliable.
 | path | what it is |
 |---|---|
 | `update.py` | **the only entry point.** Six stages, pull to page |
-| `wx.py` | hourly Alberta weather, two years back, for the like-day panel |
 | `Update.ps1` | thin wrapper: run `update.py`, sanity-check the output, commit, push |
 | `Probe-AESO.ps1` | one-time: reports which AESO endpoints your key can reach |
 | `Watch-CSD.ps1` | hourly Current Supply Demand logger |
@@ -207,10 +206,8 @@ the days the read is least reliable.
 | `model/pipeline.py` | raw exports → hourly actuals, day-ahead vintages, the cushion |
 | `model/core.py` | the model: level curve, residual pools, calibration |
 | `model/page.py` | model → `docs/index.html` |
-| `model/likeday.py` | which past days had weather shaped like today's |
 | `model/template.html` | the page, with a `__DATA__` placeholder |
 | `model/price_history.csv` | accumulated settled price — the one piece of state |
-| `cache/wx_hourly.csv` | temperature, wind, radiation and cloud, hourly, two years |
 | `model/calibration.pkl` | the fitted maps, so `-SkipScore` has something to reuse |
 | `model/itbands.json` | the endogenous intertie curve |
 | `model/fund_bands.json`, `model/itp10.json` | fundamentals bands, worst-tenth import |
@@ -353,53 +350,6 @@ pull *is* a day-ahead vintage. After a year of them the API can measure its own
 day-ahead error and the forecast half of the CANPOWER dependency disappears.
 The interchange half only closes if `Probe-AESO.ps1` finds an actual-flow route.
 
-## Days with weather like today's
-
-A second analogue panel, matched on **weather alone**: temperature, wind speed
-at 100 m, shortwave radiation and cloud cover, each as a 24-hour shape. Load is
-deliberately kept out of the distance — load is the thing the panel is trying to
-tell you about, so putting it in the question would make every answer circular.
-The older "Days that looked like this one" panel is unchanged and still matches
-on fundamentals; the two are meant to be read against each other.
-
-Each variable is z-scored against its own two years before anything is squared,
-so cloud (0–100) cannot drown out wind (0–50) purely on units. Per-variable
-distance is the root-mean-square gap over the 24 hours; the score is the plain
-average of the four. The three nearest days are charted against today's load,
-with the four weather deltas and, for each, whether load ran above or below
-normal.
-
-"Normal" is a seasonal curve fitted across the whole history with **Saturday and
-Sunday carrying their own level** — Alberta runs about 260 MW lighter on a
-weekend, and without that every weekend match would read as light load when all
-that happened is that it was a weekend.
-
-The last seven days are excluded. Weather runs in spells, so the nearest days
-would otherwise almost always be this week.
-
-### The weather feed
-
-`wx.py` pulls from Open-Meteo (ECMWF/ERA5 reanalysis, free, no key) for three
-points — Calgary, Edmonton and Pincher Creek, the two load centres and the wind
-belt — and averages them into one province-wide hourly reading in
-`cache\wx_hourly.csv`. Two endpoints, because the archive runs about five days
-behind: `archive-api` for settled history, `api` with `past_days` for the tail.
-
-```
-python wx.py            top up to today (a few seconds)
-python wx.py --full     throw the cache away and rebuild two years
-```
-
-`Update.ps1` runs it before `update.py`, and does so **non-fatally**: if the
-pull fails, the panel shows the weather it already had and everything else
-refreshes as normal. If `cache\wx_hourly.csv` does not exist at all the panel
-hides itself and no other panel is affected.
-
-**Run `python wx.py` once before the first refresh** — the initial two-year
-build takes a minute; after that it is a few seconds a day.
-
----
-
 ## Known limits
 
 - **Wind is the binding constraint on horizon.** AESO's wind and solar report is
@@ -417,13 +367,6 @@ build takes a minute; after that it is a few seconds a day.
 - **The backtest uses actual gas availability and intertie flows**, because no
   forecast archive exists for either. Expect live results slightly worse than
   the panel's figures.
-- **The like-day panel depends on an outside feed.** Open-Meteo is free and
-  unauthenticated, which also means nobody owes it to us. If it goes away the
-  panel hides and nothing else on the page notices.
-- **Three matches is a sample of three.** They put a range around what weather
-  like today's has done to load. They are not a forecast, and with two years of
-  history a genuinely unusual day has no close match at all — read the closeness
-  score before reading the verdict.
 - **The probability ladder has visible plateaus.** Isotonic calibration on a
   finite sample produces flat steps, so two adjacent cushion cells can read the
   same. That is the evidence running out, shown rather than smoothed over.
