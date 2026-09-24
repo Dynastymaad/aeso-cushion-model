@@ -446,15 +446,7 @@ def pull_aeso(key, outdir, days=760):
         dest = outdir/f'{name}.{ext}'
         try:
             body, via = fetch(url, key if needkey else None)
-            # Write to a temp file and rename, rather than truncating in place.
-            # The asset monitor reads refresh/gencap.json every few minutes; an
-            # in-place rewrite leaves a window where it is empty or half a file,
-            # and a reader landing in it falls back to NAMEPLATE capability -
-            # several thousand MW of phantom cushion. os.replace is atomic on
-            # the same volume, so a reader sees either the old file or the new.
-            tmp = dest.with_suffix(dest.suffix + '.tmp')
-            tmp.write_bytes(body)
-            os.replace(tmp, dest)
+            dest.write_bytes(body)
             say(f"{name:<13} {len(body)/1024:>9,.0f} KB" + (f"   (via {via})" if via else ""))
         except Exception as ex:
             if dest.exists():
@@ -469,10 +461,7 @@ def pull_aeso(key, outdir, days=760):
     z = ARCHIVE/f"{today:%Y-%m-%d}.zip"
     if not z.exists():
         with zipfile.ZipFile(z,'w',zipfile.ZIP_DEFLATED) as zf:
-            for p in sorted(outdir.iterdir()):
-                if p.suffix == '.tmp':   # a half-written feed from a crashed run
-                    continue
-                zf.write(p, p.name)
+            for p in sorted(outdir.iterdir()): zf.write(p, p.name)
         say(f"archived {z.name}")
 
 
