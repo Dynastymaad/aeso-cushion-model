@@ -232,12 +232,6 @@ svg{display:block;width:100%;height:auto}
 .ldv{border-top:1px solid var(--line);margin-top:9px;padding-top:9px;font-size:12.5px;color:var(--ink-2)}
 .ldv b{font-weight:600}
 .ldhi{color:var(--tight)} .ldlo{color:var(--s-base)} .ldmid{color:var(--ink-2)}
-.ldpk{border-top:1px solid var(--line);margin-top:9px;padding-top:9px}
-.ldpkv{font-size:21px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.1}
-.ldpkv span{font-size:11px;font-weight:500;color:var(--ink-3)}
-.ldpkl{font-size:10.5px;color:var(--ink-2);margin-top:1px}
-.ldpks{font-size:10px;color:var(--ink-3);margin-top:3px}
-.ldpkg{font-size:12px;color:var(--ink-2);margin-top:5px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 .bo-bad{color:#b3261e!important;font-weight:700;background:rgba(179,38,30,.10)}
 .bo-soft{color:#8a5a00!important;background:rgba(214,158,46,.12)}
@@ -1171,7 +1165,7 @@ function drawLike(){
   const T=L.today, C=['var(--s-scen)','var(--ok)','var(--beyond)'];
 
   $('ldSub').textContent=`${L.ndays.toLocaleString('en-CA')} days searched, `
-    +`${L.span[0]} to ${L.span[1]} — matched on how the evening is likely to land`;
+    +`${L.span[0]} to ${L.span[1]} — matched on weather only, never on load`;
 
   // ---- one chart, today's load against each like day's -------------------
   const W=920,H=250,Lm=52,R=14,Tm=12,B=26,iw=W-Lm-R,ih=H-Tm-B;
@@ -1208,13 +1202,15 @@ function drawLike(){
   $('ldBody').innerHTML=`<div class="ana">`+L.matches.map((m,i)=>{
     const dd=new Date(m.d+'T12:00:00');
     const vs=m.vs, pc=m.vspc;
-    const cls=Math.abs(pc)<1.5?'ldmid':(vs>0?'ldhi':'ldlo');
-    const word=Math.abs(pc)<1.5?'about normal':(vs>0?'ABOVE normal':'BELOW normal');
-    const verdict=`Evening peak ran <b class="${cls}">${word}</b>`
-      +(Math.abs(pc)<1.5?'':` — <b class="${cls}">${vs>0?'+':''}${vs.toLocaleString('en-CA')} MW (${pc>0?'+':''}${pc.toFixed(1)}%)</b>`)
-      +` for a ${dd.toLocaleDateString('en-CA',{weekday:'long'})} that time of year (${mw(m.norm)} MW).`;
-    const gap=m.gap;
-    const gcls=gap==null?'':(Math.abs(gap)<150?'ldmid':(gap>0?'ldhi':'ldlo'));
+    let verdict;
+    if(vs==null){ verdict='Load for that day is not in the history.'; }
+    else{
+      const cls=Math.abs(pc)<1.5?'ldmid':(vs>0?'ldhi':'ldlo');
+      const word=Math.abs(pc)<1.5?'about normal':(vs>0?'ABOVE normal':'BELOW normal');
+      verdict=`Load ran <b class="${cls}">${word}</b>`
+        +(Math.abs(pc)<1.5?'':` — <b class="${cls}">${vs>0?'+':''}${vs.toLocaleString('en-CA')} MW (${pc>0?'+':''}${pc.toFixed(1)}%)</b>`)
+        +` against a normal ${dd.toLocaleDateString('en-CA',{weekday:'long'})} that time of year (${mw(m.norm)} MW).`;
+    }
     return `<div class="anac" style="border-left:3px solid ${C[i]}">
       <h4>${dd.toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric',year:'numeric'})}</h4>
       <div class="when">${m.back.toLocaleString('en-CA')} days ago · closeness ${m.score.toFixed(2)} — lower is nearer</div>
@@ -1222,66 +1218,57 @@ function drawLike(){
         <div><div class="l">Temp</div><div class="v">${dnum(m.dt,'',1)}</div><div class="u">°C vs today</div></div>
         <div><div class="l">Wind</div><div class="v">${dnum(m.dw,'',1)}</div><div class="u">km/h vs today</div></div>
         <div><div class="l">Radiation</div><div class="v">${dnum(m.dr,'',2)}</div><div class="u">kWh/m² vs today</div></div>
-        <div><div class="l">Cloud</div><div class="v" style="color:var(--ink-3)">${dnum(m.dc,'',0)}</div><div class="u">pts · not matched</div></div>
+        <div><div class="l">Cloud</div><div class="v">${dnum(m.dc,'',0)}</div><div class="u">pts vs today</div></div>
       </div>
       <div class="kv"><span>That day's weather</span><b>${m.tmean}°C · ${m.wmean} km/h · ${m.cmean}% cloud</b></div>
-      <div class="ldpk">
-        <div class="ldpkv">${mw(m.eve)} <span>MW</span></div>
-        <div class="ldpkl">evening peak, HE17–21, restated in today's year</div>
-        <div class="ldpks">measured ${mw(m.eve_raw)} MW &middot; ${m.lift>=0?'+':''}${mw(m.lift)} MW of load growth since</div>
-        ${gap==null?'':`<div class="ldpkg">vs today: <b class="${gcls}">${gap>0?'+':''}${gap.toLocaleString('en-CA')} MW</b></div>`}
-      </div>
-      <div class="kv"><span>Single peak hour</span><b>${mw(m.pk)} MW</b></div>
+      <div class="kv"><span>Average load</span><b>${mw(m.lmean)} MW</b></div>
+      <div class="kv"><span>Peak load</span><b>${mw(m.lpk)} MW</b></div>
       <div class="ldv">${verdict}</div>
       ${m.px?`<div class="out">
-        <div class="kv"><span>Evening price HE17–21</span><b>${m.px.eve==null?'—':usd(m.px.eve)}</b></div>
-        <div class="kv"><span>Day average</span><b>${usd(m.px.avg)}</b></div>
+        <div class="kv"><span>What it settled</span><b>${usd(m.px.avg)}</b></div>
         <div class="kv"><span>Worst hour</span><b style="color:${m.px.max>=300?'var(--tight)':'var(--ink)'}">${usd(m.px.max)}</b></div>
         <div class="kv"><span>Hours over $100</span><b>${m.px.n100}</b></div></div>`:''}
     </div>`;}).join('')+`</div>`;
 
   // ---- what it means -------------------------------------------------------
-  // 'Disagree' means genuinely pulling opposite ways. Two below and one flat is
-  // a lean, not a conflict, and calling it one throws away the only signal here.
+  // Read the three honestly. 'Disagree' means genuinely pulling opposite ways -
+  // some above, some below. Two below and one flat is a lean, not a conflict,
+  // and calling it one threw away the only signal the panel had.
   const withLoad=L.matches.filter(m=>m.vs!=null);
   const n=withLoad.length;
   const above=withLoad.filter(m=>m.vspc>1.5).length, below=withLoad.filter(m=>m.vspc<-1.5).length;
   const mid=n-above-below;
   let read;
   if(!n) read='None of the three has settled load behind it yet.';
-  else if(above&&below) read=`They pull opposite ways — ${above} above normal, ${below} below. Weather like today's has not reliably moved the evening peak either way, so do not lean on it.`;
-  else if(above===n) read=`All ${n} ran <strong>above</strong> normal. Weather like today's has been pushing the evening peak up.`;
-  else if(below===n) read=`All ${n} ran <strong>below</strong> normal. Weather like today's has been holding the evening peak down.`;
+  else if(above&&below) read=`They pull opposite ways — ${above} above normal, ${below} below. Weather like today's has not reliably moved load either way, so do not lean on it.`;
+  else if(above===n) read=`All ${n} ran <strong>above</strong> normal. Weather like today's has been pulling load up.`;
+  else if(below===n) read=`All ${n} ran <strong>below</strong> normal. Weather like today's has been holding load down.`;
   else if(above) read=`${above} of ${n} ran <strong>above</strong> normal, ${mid} sat about normal, none below. A lean up, and a mild one.`;
   else if(below) read=`${below} of ${n} ran <strong>below</strong> normal, ${mid} sat about normal, <strong>none above</strong>. A lean down, and a mild one.`;
-  else read=`All ${n} sat about normal.`;
-  const gaps=L.matches.map(m=>m.gap).filter(x=>x!=null).map(Math.abs);
-  const mg=gaps.length?Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length):null;
-  const tvs=(T.vs==null)?'':` Today is tracking <strong>${T.vs>0?'+':''}${T.vs.toLocaleString('en-CA')} MW</strong> against its own normal of ${mw(T.norm)} MW${T.partial?' (part of today is still AESO forecast)':''}.`;
+  else read=`All ${n} sat about normal. Weather like today's has not moved load much either way.`;
+  const tvs = (T.vs==null)?'':` Today is tracking <strong>${T.vs>0?'+':''}${T.vs.toLocaleString('en-CA')} MW</strong> against its own normal of ${mw(T.norm)} MW${T.partial?' (part of today is still AESO forecast)':''}.`;
 
   $('ldText').innerHTML=`
     <p class="lede">Today: <strong>${T.tmean}°C</strong> average, <strong>${T.wmean} km/h</strong> wind at hub height,
-      <strong>${T.rtot} kWh/m²</strong> of radiation, <strong>${T.cmean}%</strong> cloud, evening peak
-      <strong>${mw(T.eve)} MW</strong>. ${read}${tvs}</p>
-    <p><strong>What these days are matched on.</strong> Not weather resemblance — that version matched days that
-      looked alike while their evening peaks landed 370 MW apart. These are matched on <em>how the evening is
-      likely to land</em>. A model maps the day's weather to its HE17–21 load, and the search looks for days whose
-      predicted evening is closest to today's, with a smaller term keeping the raw temperature, wind and radiation
-      shapes recognisably similar. Measured on 250 held-out days, that lands the top three
-      <strong>${mg!=null?mg+' MW':'~270 MW'}</strong> from today's evening peak against 369 MW for the old method.</p>
-    <p><strong>Every load number is restated in today's year.</strong> Alberta's evening peak grows about
-      <strong>${L.growth>0?'+':''}${L.growth} MW a year</strong>. A match from two years back would otherwise read
-      roughly 640 MW light purely because it is old — which is what made the earlier cards look so wrong. Each card
-      shows what the day actually measured and the growth added back.</p>
-    <p><strong>Cloud is shown but not matched on.</strong> Fitted against evening peak load it earns a weight of
-      zero: it separates days less well than the other three and has no usable link to the evening. It used to eat
-      a quarter of the score. It is on the card because you want to see it, greyed because it did not influence
-      the match — expect it to drift further than the other three.</p>
-    <p class="warn">The floor for this is about <strong>${L.fit_mae} MW</strong> — that is the error of the
-      weather-to-peak model itself, and no matching scheme beats its own inputs. The last ${L.excluded} days are
-      excluded, because weather runs in spells and the nearest days would otherwise always be this week. And three
-      matches is a sample of three: read the closeness score before the verdict, and remember the single peak hour
-      is far less predictable from weather than the HE17–21 average is.</p>`;
+      <strong>${T.rtot} kWh/m²</strong> of radiation, <strong>${T.cmean}%</strong> cloud. ${read}${tvs}</p>
+    <p><strong>How the match is made.</strong> Every day in the last two years is compared with today on four
+      things and nothing else: temperature, wind speed at 100 m, shortwave radiation and cloud cover, each as a
+      24-hour shape. Each variable is put on a common scale first — z-scored against its own two years of
+      history — because otherwise cloud, which runs 0 to 100, would drown out wind, which runs 0 to 50, purely
+      because of the units. The gap is squared hour by hour, rooted, and the four are averaged as equals.
+      Zero would be identical weather.</p>
+    <p><strong>Why load is not in the match.</strong> Load is the thing we are trying to learn about. If it were
+      part of the distance, the three nearest days would be days that already had today's load, and telling you
+      their load was normal would be telling you nothing. Keeping it out is what makes the last line of each
+      card worth reading.</p>
+    <p><strong>What "normal" means.</strong> Not a recent average — a seasonal curve fitted across the whole two
+      years, with Saturday and Sunday carrying their own level. Alberta runs roughly 260 MW lighter on a
+      weekend, so without that a Saturday match would always come back looking light when all that happened
+      is that it was a Saturday.</p>
+    <p class="warn">The last ${L.excluded} days are excluded from the search. Weather runs in spells, so the three
+      nearest days would otherwise almost always be this week — which you already remember, and whose price has
+      barely settled. And three matches is a sample of three: they put a range around what weather like this has
+      done to load, they are not a forecast.</p>`;
   ldDrawn=true;
 }
 
@@ -1297,23 +1284,12 @@ function drawCrv(rows,dirty){
   sv.setAttribute('aria-label','Pool price against supply remaining');
   const cLo=-200,cHi=3200;
   const pts=G[g].filter(p=>p.c>=cLo&&p.c<=cHi);
-  // LOG price axis. On a linear axis to $1,000 everything below $200 sits in the
-  // bottom fifth of the panel, which is exactly the range you need to read to
-  // judge whether an hour reaches $50 or $100. A log axis gives every doubling
-  // the same vertical space, so $25->$50 is as legible as $500->$1,000.
-  const yLo=5, yHi=1000;
-  const lg=v=>Math.log10(Math.min(Math.max(v,yLo),yHi));
-  const L0=lg(yLo), L1=lg(yHi);
-  const X=c=>L+(c-cLo)/(cHi-cLo)*iw, Y=v=>T+ih-(lg(v)-L0)/(L1-L0)*ih;
+  const yHi=1000;
+  const X=c=>L+(c-cLo)/(cHi-cLo)*iw, Y=v=>T+ih-Math.min(v,yHi)/yHi*ih;
 
-  [5,10,20,50,100,200,500,1000].forEach(v=>{
-    const key=(v===100);
-    el(sv,'line',{x1:L,x2:W-R,y1:Y(v),y2:Y(v),
-      stroke:key?'var(--tight)':'var(--line)','stroke-width':1,
-      'stroke-opacity':key?.55:1,'stroke-dasharray':key?'4 3':''});
-    txt(sv,L-9,Y(v)+3.5,'$'+v.toLocaleString('en-CA'),
-      {anchor:'end',...(key?{fill:'var(--tight)',weight:600}:{})});});
-  txt(sv,W-R-4,Y(yLo)+3.5,'log scale',{anchor:'end',size:9,sans:1,fill:'var(--ink-3)'});
+  [0,200,400,600,800,1000].forEach(v=>{
+    el(sv,'line',{x1:L,x2:W-R,y1:Y(v),y2:Y(v),stroke:'var(--line)','stroke-width':1});
+    txt(sv,L-9,Y(v)+3.5,'$'+v.toLocaleString('en-CA'),{anchor:'end'});});
   [0,600,1200,1800,2400,3000].forEach(c=>{
     el(sv,'line',{x1:X(c),x2:X(c),y1:T,y2:T+ih,stroke:'var(--line)','stroke-width':1,'stroke-opacity':.55});
     txt(sv,X(c),H-22,c.toLocaleString('en-CA'),{anchor:'middle'});});
@@ -1365,14 +1341,9 @@ function drawCrv(rows,dirty){
     <p>Every grey dot is another hour of this day on the same curve — the day's whole trajectory
       across the stack. Green dots are hours that have already settled, plotted at what they
       actually printed, so you can see how far real prints scatter around the line.</p>
-    <p>This is the workbook's <em>Supply Remaining vs. Price</em> chart with three changes: the bands
-      are the model's calibrated quantiles rather than fitted cubics, the curve is drawn for this
-      hour's time-of-day block, because the same cushion is worth very different money at 3am and 8pm,
-      and <strong>the price axis is logarithmic</strong>. On a linear axis to $1,000 everything below
-      $200 collapses into the bottom fifth of the panel — which is the range you actually read to
-      judge whether an hour reaches $50 or $100. On a log axis every doubling gets the same height, so
-      the cheap end is as legible as the tail. The dashed red line is $100. Anything at or under
-      <strong>$5</strong> is drawn on the axis floor.</p>`;
+    <p>This is the workbook's <em>Supply Remaining vs. Price</em> chart with two changes: the bands
+      are the model's calibrated quantiles rather than fitted cubics, and the curve is drawn for this
+      hour's time-of-day block, because the same cushion is worth very different money at 3am and 8pm.</p>`;
 }
 
 
