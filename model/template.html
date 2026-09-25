@@ -1231,13 +1231,21 @@ function drawLike(){
     </div>`;}).join('')+`</div>`;
 
   // ---- what it means -------------------------------------------------------
+  // Read the three honestly. 'Disagree' means genuinely pulling opposite ways -
+  // some above, some below. Two below and one flat is a lean, not a conflict,
+  // and calling it one threw away the only signal the panel had.
   const withLoad=L.matches.filter(m=>m.vs!=null);
+  const n=withLoad.length;
   const above=withLoad.filter(m=>m.vspc>1.5).length, below=withLoad.filter(m=>m.vspc<-1.5).length;
+  const mid=n-above-below;
   let read;
-  if(!withLoad.length) read='None of the three has settled load behind it yet.';
-  else if(above===withLoad.length) read=`All ${withLoad.length} ran <strong>above</strong> normal. Weather like today's has been pulling load up.`;
-  else if(below===withLoad.length) read=`All ${withLoad.length} ran <strong>below</strong> normal. Weather like today's has been holding load down.`;
-  else read=`They disagree — some above normal, some below. Weather like today's has not reliably moved load either way, so do not lean on it.`;
+  if(!n) read='None of the three has settled load behind it yet.';
+  else if(above&&below) read=`They pull opposite ways — ${above} above normal, ${below} below. Weather like today's has not reliably moved load either way, so do not lean on it.`;
+  else if(above===n) read=`All ${n} ran <strong>above</strong> normal. Weather like today's has been pulling load up.`;
+  else if(below===n) read=`All ${n} ran <strong>below</strong> normal. Weather like today's has been holding load down.`;
+  else if(above) read=`${above} of ${n} ran <strong>above</strong> normal, ${mid} sat about normal, none below. A lean up, and a mild one.`;
+  else if(below) read=`${below} of ${n} ran <strong>below</strong> normal, ${mid} sat about normal, <strong>none above</strong>. A lean down, and a mild one.`;
+  else read=`All ${n} sat about normal. Weather like today's has not moved load much either way.`;
   const tvs = (T.vs==null)?'':` Today is tracking <strong>${T.vs>0?'+':''}${T.vs.toLocaleString('en-CA')} MW</strong> against its own normal of ${mw(T.norm)} MW${T.partial?' (part of today is still AESO forecast)':''}.`;
 
   $('ldText').innerHTML=`
