@@ -44,13 +44,6 @@ if (-not $SkipUpdate) {
     Write-Host "`n=== 1/3  skipped, reusing the last refresh ===" -ForegroundColor DarkGray
 }
 
-# Forecast journal. Scores yesterday's calls against what settled and appends to
-# verify\hourly.csv. Deliberately non-fatal and deliberately AFTER the refresh, so
-# it scores the page that was just published. Nothing downstream reads its output.
-Write-Host "`n=== forecast journal ===" -ForegroundColor DarkCyan
-python verify.py
-if ($LASTEXITCODE -ne 0) { Write-Host "verify.py failed (carrying on)" -ForegroundColor Yellow }
-
 Write-Host "`n=== 2/3  supply changes by day ===" -ForegroundColor Cyan
 python outage_delta.py
 if ($LASTEXITCODE -ne 0) { Write-Host "outage_delta failed (carrying on)" -ForegroundColor Yellow }
