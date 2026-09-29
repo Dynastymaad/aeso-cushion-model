@@ -364,6 +364,20 @@ def regress_price(P, A, f_extra, lam=3.0, minn=100):
     doy = P.date.dt.dayofyear
     P['s1'] = np.sin(2*np.pi*doy/365.25); P['c1'] = np.cos(2*np.pi*doy/365.25)
     cols = ['wind', 'ail', 'oi', 'tight', 'wk', 's1', 'c1']
+    # AESO's 90-day outage plan, as it stood on the run date, for the delivery day.
+    # Carried as a feature so the regression decides how much of it to believe at
+    # each lead - the plan runs light and slips - but only once outages.py has
+    # built enough history for that decision to be a fitted one.
+    oh = CACHE/'outage_history.csv'
+    if oh.exists():
+        O = pd.read_csv(oh, parse_dates=['rep', 'date'])
+        O = O[O.fuel.isin(['SC', 'Cogen', 'CC', 'GFS'])].groupby(['rep', 'date']).mw.sum()
+        if O.index.get_level_values('rep').nunique() >= 120:
+            P['rep_out'] = O.reindex(pd.MultiIndex.from_arrays([P.run, P.date])).values
+            cols += ['rep_out']
+            say('  outage plan in the regression (history is deep enough)')
+        else:
+            say(f"  outage plan not yet used: {O.index.get_level_values('rep').nunique()} reports on file, need 120")
     if f_extra is not None:
         idx = pd.MultiIndex.from_arrays([P.date, P.lead])
         for code, name in (('XBG', 'gas_f'), ('MPD', 'midc_f')):
