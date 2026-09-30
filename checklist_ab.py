@@ -14,7 +14,7 @@ from openpyxl.formatting.rule import CellIsRule, FormulaRule
 U = Path(sys.argv[1]) if len(sys.argv) > 1 else Path('/mnt/user-data/uploads/aeso-cushion model')
 OUT = Path(sys.argv[2]) if len(sys.argv) > 2 else Path('/mnt/user-data/outputs/Checklist_Deviations_AB.xlsx')
 TOM = pd.Timestamp(sys.argv[3]) if len(sys.argv) > 3 else (pd.Timestamp.now(tz='America/Edmonton').normalize().tz_localize(None) + pd.Timedelta(days=1))
-NH, NF = 30, 13
+NH, NF = 75, 29                            # 75 days of history; tomorrow + 29 forward (14 forecast, then outlook to day 30)
 CF_CALM = 0.16                              # calm day = daily-mean wind below 16% of capacity (capacity = rolling 365-day max hourly wind)
 PK = lambda he: he.between(8, 23)          # Alberta peak block HE8-23
 TIGHT = 1200
@@ -30,6 +30,15 @@ C['d'] = C.index.normalize(); C['he'] = C.index.hour + 1
 C['wcap'] = C.wind.rolling(24*365, min_periods=24*30).max().bfill()
 WCAP_NOW = float(C.wcap.iloc[-1])
 wx = pd.read_csv(U/'cache/wx_hourly.csv', parse_dates=[0]); wx = wx.rename(columns={wx.columns[0]: 'ts'}); wx['d'] = wx.ts.dt.normalize(); wx['he'] = wx.ts.dt.hour + 1
+wf = None
+if (U/'cache/wx_fcst.csv').exists():
+    wf = pd.read_csv(U/'cache/wx_fcst.csv', parse_dates=['t']); wf['d'] = wf.t.dt.normalize(); wf['he'] = wf.t.dt.hour + 1
+# weather climatology by day of year (+/- 7 days, every year on file) for days past the forecast
+_wd = wx.groupby('d').agg(t_max=('temp', 'max'), t_avg=('temp', 'mean')); _wd['w100'] = wx[wx.he.between(8, 23)].groupby('d').wind.mean()
+_wd['doy'] = _wd.index.dayofyear
+def wx_clim(d):
+    k = d.dayofyear; m = (np.abs(((_wd.doy - k + 182) % 365) - 182) <= 7)
+    g = _wd[m]; return (float(g.t_max.mean()), float(g.t_avg.mean()), float(g.w100.mean())) if len(g) else (None, None, None)
 
 def vint(name, val, lo, hi, src):
     d = pd.read_csv(U/f'cache/{name}.csv'); ts = [c for c in d.columns if c.lower() == 'timestamp'][0]
@@ -42,6 +51,16 @@ lfc = vint('load_fc', 'Load', 12, 40, 'AESO'); wfc = vint('wind_fc', 'Value', 16
 lfc = pd.DataFrame({'v': lfc}); lfc['d'] = lfc.index.normalize(); lfc['he'] = lfc.index.hour + 1
 wfc = pd.DataFrame({'v': wfc}); wfc['d'] = wfc.index.normalize(); wfc['he'] = wfc.index.hour + 1
 
+# wind MW from the 100 m wind speed: capacity factor by 5 km/h bin (HE8-23 mean speed), last 365 days
+_pk = C[(C.d >= TOM - pd.Timedelta(days=365)) & (C.d < TOM) & PK(C.he)].groupby('d').agg(w=('wind', 'mean'), cap=('wcap', 'mean'))
+_pk['ws'] = wx[PK(wx.he)].groupby('d').wind.mean().reindex(_pk.index); _pk = _pk.dropna(); _pk['bin'] = (_pk.ws // 5) * 5
+CF_BY_WS = (_pk.w / _pk.cap).groupby(_pk.bin).mean()
+def wind_from_ws(ws_):
+    if ws_ is None or np.isnan(ws_) or not len(CF_BY_WS): return None
+    b = min(max((ws_ // 5) * 5, CF_BY_WS.index.min()), CF_BY_WS.index.max())
+    cf = CF_BY_WS.get(b, np.nan)
+    if np.isnan(cf): cf = CF_BY_WS.iloc[(CF_BY_WS.index - b).abs().argmin()]
+    return float(cf * WCAP_NOW)
 # refresh (forward)
 L = json.load(open(U/'refresh/load.json', encoding='utf-8-sig'))['return']['Actual Forecast Report']
 ld = pd.DataFrame([{'t': pd.Timestamp(r['begin_datetime_mpt']), 'act': pd.to_numeric(r.get('alberta_internal_load'), errors='coerce'),
@@ -83,7 +102,6 @@ if fe is not None:
     nb = fe[fe.lead >= 0].sort_values('lead').groupby(['Strip', 'ExchangeCode']).Price.first().unstack()
 
 # --------------------------------------------------------------- the table --
-dates = pd.date_range(TOM - pd.Timedelta(days=NH), TOM + pd.Timedelta(days=NF))
 def hist(d): return d < TOM
 def pkavg(df, col, d, mask=None):
     g = df[(df.d == d) & PK(df.he)];
@@ -95,75 +113,116 @@ def daymin_pk(df, col, d):
 def dmean(df, col, d):
     g = df[df.d == d]; return float(g[col].mean()) if len(g) and g[col].notna().any() else None
 ni30 = float(C[(C.d >= TOM - pd.Timedelta(days=30)) & (C.d < TOM)].net_imports_actual_scheduled.mean())
-recs = []
-for d in dates:
-    r = {'Date': d, 'Period': 'History' if d < TOM else ('Tomorrow' if d == TOM else 'Forward')}
-    H = d < TOM
-    # load
-    if H:
-        r['lf_pk'] = daymax(lfc, 'v', d); r['lf_avg'] = pkavg(lfc, 'v', d); r['la_pk'] = daymax(C, 'ail', d)
-    else:
-        r['lf_pk'] = daymax(ld, 'fc', d); r['lf_avg'] = pkavg(ld, 'fc', d); r['la_pk'] = None
-    r['l_miss'] = (r['la_pk'] - r['lf_pk']) if (r['la_pk'] is not None and r['lf_pk'] is not None) else None
-    # thermal
-    if H:
-        r['th_av'] = pkavg(C, 'thermal', d); r['sc_av'] = pkavg(C, 'sc', d)
-        g = C[C.d == d].thermal; r['trip'] = float(-(g.diff().min())) if len(g) > 1 else None
-    else:
-        r['th_av'] = pkavg(gc, 'thermal', d); r['sc_av'] = pkavg(gc, 'sc', d); r['trip'] = None
-    r['plan_out'] = float(orep.thermal_out.get(d, np.nan)) if d in orep.index else None
-    # renewables
-    if H:
-        r['w_fc'] = pkavg(wfc, 'v', d); r['w_act'] = pkavg(C, 'wind', d); r['sol_fc'] = daymax(C, 'solar', d)
-    else:
-        r['w_fc'] = pkavg(W, 'ml', d) if (W.d == d).sum() >= 16 else (float(ol.wind.get(d, np.nan)) if d in ol.index else None)
-        r['w_act'] = None; r['sol_fc'] = daymax(S, 'ml', d) if (S.d == d).any() else None
-    r['w_miss'] = (r['w_act'] - r['w_fc']) if (r['w_act'] is not None and r['w_fc'] is not None) else None
-    if H:
-        wd = dmean(C, 'wind', d); r['w_cf'] = 100*wd/float(C[C.d == d].wcap.mean()) if wd is not None else None
-    else:
-        wd = dmean(W, 'ml', d) if (W.d == d).sum() >= 16 else (float(ol.wind.get(d, np.nan)) if d in ol.index else None)
-        r['w_cf'] = 100*wd/WCAP_NOW if wd is not None and not np.isnan(wd) else None
-    # supply
-    if H:
-        r['cush_min'] = daymin_pk(C, 'cush', d); r['cush_avg'] = pkavg(C, 'cush', d); r['rem_min'] = daymin_pk(C, 'rem', d)
-    else:
-        # forward cushion from gencap + AESO forecasts, hour by hour
-        gg = gc[(gc.d == d)].copy()
-        if len(gg) and (ld.d == d).any():
-            gg['load'] = ld.fc.reindex(gg.index); gg['wind'] = W.ml.reindex(gg.index) if (W.d == d).sum() >= 16 else (float(ol.wind.get(d, np.nan)) if d in ol.index else np.nan)
+# beyond the 14-day feeds: Tesla load where it reaches, else same-weekday level of the last 4 weeks;
+# wind from the ECMWF outlook if it is fresh, else the calendar-month normal; thermal = last gencap day
+# moved by the 90-day report; solar at the last-14-day level. Marked Period = Outlook.
+tesla_all = vint('load_fc', 'Load', 12, 800, 'Tesla'); tesla_all = pd.DataFrame({'v': tesla_all}); tesla_all['d'] = tesla_all.index.normalize(); tesla_all['he'] = tesla_all.index.hour + 1
+GL = gc.d.max()
+ol_fresh = (U/'cache/outlook.csv').exists() and (pd.Timestamp.now() - pd.Timestamp((U/'cache/outlook.csv').stat().st_mtime, unit='s')).days <= 3
+hist28 = C[(C.d >= TOM - pd.Timedelta(days=28)) & (C.d < TOM)]
+wnorm = C[(C.d < TOM)].copy(); wnorm['m'] = wnorm.d.dt.month; wnorm = wnorm[PK(wnorm.he)].groupby('m').wind.mean()
+sol14 = float(C[(C.d >= TOM - pd.Timedelta(days=14)) & (C.d < TOM)].groupby('d').solar.max().mean())
+oth_gl = float(gc[(gc.d == GL) & PK(gc.he)]['OTHER'].mean()) if (gc.d == GL).any() else 0.0
+def build_rows(TOM_):
+    dates = pd.date_range(TOM_ - pd.Timedelta(days=NH), TOM_ + pd.Timedelta(days=NF)); recs = []
+    for d in dates:
+        H = d < TOM; O = d > TOM_ + pd.Timedelta(days=13)
+        r = {'Date': d, 'Period': 'History' if d < TOM_ else ('Tomorrow' if d == TOM_ else ('Forward' if not O else 'Outlook'))}
+        # load
+        if H:
+            r['lf_pk'] = daymax(lfc, 'v', d); r['lf_avg'] = pkavg(lfc, 'v', d); r['la_pk'] = daymax(C, 'ail', d)
+        elif (ld.d == d).any():
+            r['lf_pk'] = daymax(ld, 'fc', d); r['lf_avg'] = pkavg(ld, 'fc', d); r['la_pk'] = None
+        elif (tesla_all.d == d).sum() >= 16:
+            r['lf_pk'] = daymax(tesla_all, 'v', d); r['lf_avg'] = pkavg(tesla_all, 'v', d); r['la_pk'] = None
+        else:
+            g = hist28[hist28.d.dt.dayofweek == d.dayofweek]
+            r['lf_pk'] = float(g.groupby('d').ail.max().mean()) if len(g) else None; r['lf_avg'] = float(g[PK(g.he)].ail.mean()) if len(g) else None; r['la_pk'] = None
+        r['l_miss'] = (r['la_pk'] - r['lf_pk']) if (r['la_pk'] is not None and r['lf_pk'] is not None) else None
+        # thermal
+        if H:
+            r['th_av'] = pkavg(C, 'thermal', d); r['sc_av'] = pkavg(C, 'sc', d)
+            g = C[C.d == d].thermal; r['trip'] = float(-(g.diff().min())) if len(g) > 1 else None
+        elif (gc.d == d).any():
+            r['th_av'] = pkavg(gc, 'thermal', d); r['sc_av'] = pkavg(gc, 'sc', d); r['trip'] = None
+        else:
+            th0, sc0 = pkavg(gc, 'thermal', GL), pkavg(gc, 'sc', GL)
+            if d in orep.index and GL in orep.index:
+                dth = float(orep.loc[d, ['Cogen', 'CC', 'GFS']].sum() - orep.loc[GL, ['Cogen', 'CC', 'GFS']].sum()); dsc = float(orep.loc[d, 'SC'] - orep.loc[GL, 'SC'])
+            else: dth = dsc = 0.0
+            r['th_av'] = (th0 - dth) if th0 is not None else None; r['sc_av'] = (sc0 - dsc) if sc0 is not None else None; r['trip'] = None
+        r['plan_out'] = float(orep.thermal_out.get(d, np.nan)) if d in orep.index else None
+        # renewables
+        if H:
+            r['w_fc'] = pkavg(wfc, 'v', d); r['w_act'] = pkavg(C, 'wind', d); r['sol_fc'] = daymax(C, 'solar', d)
+        else:
+            if (W.d == d).sum() >= 16: r['w_fc'] = pkavg(W, 'ml', d)
+            elif ol_fresh and d in ol.index: r['w_fc'] = float(ol.wind.get(d))
+            elif wf is not None and (wf.d == d).sum() >= 20: r['w_fc'] = wind_from_ws(float(wf[(wf.d == d) & PK(wf.he)].wind.mean()))
+            else: r['w_fc'] = float(wnorm.get(d.month, np.nan))
+            r['w_act'] = None; r['sol_fc'] = daymax(S, 'ml', d) if (S.d == d).any() else sol14
+        r['w_miss'] = (r['w_act'] - r['w_fc']) if (r['w_act'] is not None and r['w_fc'] is not None) else None
+        if H:
+            wd = dmean(C, 'wind', d); r['w_cf'] = 100*wd/float(C[C.d == d].wcap.mean()) if wd is not None else None
+        else:
+            wd = dmean(W, 'ml', d) if (W.d == d).sum() >= 16 else r['w_fc']
+            r['w_cf'] = 100*wd/WCAP_NOW if wd is not None and not np.isnan(wd) else None
+        # supply
+        if H:
+            r['cush_min'] = daymin_pk(C, 'cush', d); r['cush_avg'] = pkavg(C, 'cush', d); r['rem_min'] = daymin_pk(C, 'rem', d)
+        elif (gc.d == d).any() and (ld.d == d).any():
+            # forward cushion from gencap + AESO forecasts, hour by hour
+            gg = gc[(gc.d == d)].copy()
+            gg['load'] = ld.fc.reindex(gg.index); gg['wind'] = W.ml.reindex(gg.index) if (W.d == d).sum() >= 16 else r['w_fc']
             gg['solar'] = S.ml.reindex(gg.index).fillna(0) if (S.d == d).any() else 0
             gg['cushf'] = gg.thermal + gg.sc + gg['OTHER'] + gg.wind + gg.solar - (gg.load - ni30)
             gg['remf'] = gg.thermal - (gg.load - gg.wind - gg.solar - ni30 - gg['HYDRO'] - gg['ENERGY STORAGE'] - gg['OTHER'])
             p = gg[PK(gg.he)]
             r['cush_min'] = float(p.cushf.min()) if p.cushf.notna().any() else None; r['cush_avg'] = float(p.cushf.mean()) if p.cushf.notna().any() else None
             r['rem_min'] = float(p.remf.min()) if p.remf.notna().any() else None
-        else: r['cush_min'] = r['cush_avg'] = r['rem_min'] = None
-    # interties / neighbours
-    r['atc'] = float(atc.get(d, np.nan)) if d in atc.index else None
-    r['ni'] = dmean(C, 'net_imports_actual_scheduled', d) if H else None
-    r['midc'] = float(nb['MPD'].get(d, np.nan)) if fe is not None and d in nb.index else None
-    r['gas'] = float(nb['XBG'].get(d, np.nan)) if fe is not None and d in nb.index else None
-    # prices
-    if H:
-        g = C[C.d == d].price.dropna()
-        if len(g) >= 20:
-            r['px_flat'] = float(g.mean()); r['px_pk'] = pkavg(C, 'price', d); r['px_max'] = float(g.max()); r['n100'] = int((g > 100).sum())
+        else:
+            # daily approximation: peak-hour levels, solar at half its daily max over the block
+            ok = all(r[k] is not None and not (isinstance(r[k], float) and np.isnan(r[k])) for k in ('th_av', 'sc_av', 'w_fc', 'lf_pk', 'lf_avg', 'sol_fc'))
+            if ok:
+                r['cush_min'] = r['th_av'] + r['sc_av'] + oth_gl + r['w_fc'] + 0.5*r['sol_fc'] - (r['lf_pk'] - ni30)
+                r['cush_avg'] = r['th_av'] + r['sc_av'] + oth_gl + r['w_fc'] + 0.5*r['sol_fc'] - (r['lf_avg'] - ni30)
+                r['rem_min'] = r['th_av'] - (r['lf_pk'] - r['w_fc'] - 0.5*r['sol_fc'] - ni30 - oth_gl)
+            else: r['cush_min'] = r['cush_avg'] = r['rem_min'] = None
+        # interties / neighbours
+        r['atc'] = float(atc.get(d, np.nan)) if d in atc.index else None
+        r['ni'] = dmean(C, 'net_imports_actual_scheduled', d) if H else ni30
+        r['midc'] = float(nb['MPD'].get(d, np.nan)) if fe is not None and d in nb.index else None
+        r['gas'] = float(nb['XBG'].get(d, np.nan)) if fe is not None and d in nb.index else None
+        # prices
+        if H:
+            g = C[C.d == d].price.dropna()
+            if len(g) >= 20:
+                r['px_flat'] = float(g.mean()); r['px_pk'] = pkavg(C, 'price', d); r['px_max'] = float(g.max()); r['n100'] = int((g > 100).sum())
+            else: r['px_flat'] = r['px_pk'] = r['px_max'] = r['n100'] = None
         else: r['px_flat'] = r['px_pk'] = r['px_max'] = r['n100'] = None
-    else: r['px_flat'] = r['px_pk'] = r['px_max'] = r['n100'] = None
-    r['da_pk'] = float(da['XDQ'].get(d, np.nan)) if d in da.index else None
-    r['da_flat'] = float(da['XDT'].get(d, np.nan)) if d in da.index else None
-    r['pk_minus_da'] = (r['px_pk'] - r['da_pk']) if (r['px_pk'] is not None and r['da_pk'] is not None and not np.isnan(r['da_pk'])) else None
-    # weather (province average of Calgary / Edmonton / Pincher Creek)
-    if H and (wx.d == d).any():
-        g = wx[wx.d == d]; r['t_max'] = float(g.temp.max()); r['t_avg'] = float(g.temp.mean())
-        r['w100'] = float(g[PK(g.he)].wind.mean()); r['rad'] = float(g[g.he.between(11, 16)].rad.mean()); r['cloud'] = float(g[g.he.between(11, 16)].cloud.mean())
-    else: r['t_max'] = r['t_avg'] = r['w100'] = r['rad'] = r['cloud'] = None
-    r['tight'] = TIGHT
-    recs.append(r)
-D = pd.DataFrame(recs)
-for c in D.columns:
-    if c not in ('Date', 'Period'): D[c] = pd.to_numeric(D[c], errors='coerce')
+        r['da_pk'] = float(da['XDQ'].get(d, np.nan)) if d in da.index else None
+        r['da_flat'] = float(da['XDT'].get(d, np.nan)) if d in da.index else None
+        r['pk_minus_da'] = (r['px_pk'] - r['da_pk']) if (r['px_pk'] is not None and r['da_pk'] is not None and not np.isnan(r['da_pk'])) else None
+        # weather (province average of Calgary / Edmonton / Pincher Creek)
+        if H and (wx.d == d).any():
+            g = wx[wx.d == d]; r['t_max'] = float(g.temp.max()); r['t_avg'] = float(g.temp.mean())
+            r['w100'] = float(g[PK(g.he)].wind.mean()); r['rad'] = float(g[g.he.between(11, 16)].rad.mean()); r['cloud'] = float(g[g.he.between(11, 16)].cloud.mean())
+        elif (not H) and wf is not None and (wf.d == d).sum() >= 20:
+            g = wf[wf.d == d]; r['t_max'] = float(g.temp.max()); r['t_avg'] = float(g.temp.mean())
+            r['w100'] = float(g[PK(g.he)].wind.mean()); r['rad'] = float(g[g.he.between(11, 16)].rad.mean()); r['cloud'] = float(g[g.he.between(11, 16)].cloud.mean())
+        elif not H:
+            r['t_max'], r['t_avg'], r['w100'] = wx_clim(d); r['rad'] = r['cloud'] = None
+        else: r['t_max'] = r['t_avg'] = r['w100'] = r['rad'] = r['cloud'] = None
+        r['tight'] = TIGHT
+        recs.append(r)
+    return pd.DataFrame(recs)
+def numeric(Dx):
+    for c in Dx.columns:
+        if c not in ('Date', 'Period'): Dx[c] = pd.to_numeric(Dx[c], errors='coerce')
+    return Dx
+D = numeric(build_rows(TOM))
+D1 = numeric(build_rows(TOM - pd.DateOffset(years=1)))      # the same window a year ago (all actuals)
+D2 = numeric(build_rows(TOM - pd.DateOffset(years=2)))      # and two years ago (the feed starts 2024-08-31)
 
 ITEMS = [  # key, group, label, unit, source
  ('lf_pk', 'Load', 'AESO load forecast, daily peak', 'MW', 'AESO day-ahead vintage (history); AESO 14-day load forecast (forward)'),
@@ -211,21 +270,39 @@ thin = Side(style='thin', color='BFBFBF'); BOX = Border(bottom=thin)
 wb = openpyxl.Workbook()
 
 # ---------------------------------------------------------------- Data -------
-ws = wb.active; ws.title = 'Data'
-ws.cell(1, 1, 'Date').font = F(bold=True); ws.cell(1, 2, 'Period').font = F(bold=True)
-for k, g, lab, u, src in ITEMS:
-    c = ws.cell(1, COLIDX[k], f'{lab} ({u})'); c.font = F(bold=True); c.alignment = Alignment(wrap_text=True, vertical='top')
-for i, r in D.iterrows():
-    row = i + 2; ws.cell(row, 1, r.Date.to_pydatetime()).number_format = 'yyyy-mm-dd'; ws.cell(row, 1).font = BLACK
-    ws.cell(row, 2, r.Period).font = BLACK
-    for k in KEYS:
-        v = r[k]; c = ws.cell(row, COLIDX[k], None if pd.isna(v) else round(float(v), 2)); c.font = BLUE
-        c.number_format = '#,##0.00' if k in ('gas',) else ('#,##0.0' if k in ('t_max', 't_avg', 'w100', 'rad', 'cloud', 'w_cf', 'px_flat', 'px_pk', 'px_max', 'da_pk', 'da_flat', 'pk_minus_da', 'midc') else '#,##0')
-        if r.Period == 'Tomorrow': c.fill = YEL
-    if r.Period == 'Tomorrow': ws.cell(row, 1).fill = YEL; ws.cell(row, 2).fill = YEL
-ws.freeze_panes = 'C2'; ws.column_dimensions['A'].width = 12; ws.column_dimensions['B'].width = 10
-for k in KEYS: ws.column_dimensions[CL(COLIDX[k])].width = 16
-ws.row_dimensions[1].height = 60
+CH_KEYS = ['lf_pk', 'la_pk', 'th_av', 'sc_av', 'plan_out', 'trip', 'cush_min', 'cush_avg', 'tight', 'rem_min', 'w_fc', 'w_act', 'px_pk', 'da_pk', 'pk_minus_da', 'atc', 'ni', 't_max', 't_avg', 'w100', 'midc']
+SHORT = {'lf_pk': 'Load fc peak', 'la_pk': 'Load actual peak', 'th_av': 'Baseload gas', 'sc_av': 'Simple cycle', 'plan_out': 'Report MW out', 'trip': 'Trips', 'cush_min': 'Cushion tightest', 'cush_avg': 'Cushion avg', 'tight': 'Tight line',
+         'rem_min': 'Thermal remaining', 'w_fc': 'Wind fc', 'w_act': 'Wind actual', 'px_pk': 'Pool HE8-23', 'da_pk': 'Day-ahead fwd', 'pk_minus_da': 'Settle - fwd', 'atc': 'Import ATC', 'ni': 'Net imports', 't_max': 'T max', 't_avg': 'T mean', 'w100': 'Wind 100 m', 'midc': 'Mid-C'}
+def write_data(ws_, Dx, split):
+    """The daily table plus the chart helper columns. split = mark the Outlook rows as a separate (dashed) series."""
+    ws_.cell(1, 1, 'Date').font = F(bold=True); ws_.cell(1, 2, 'Period').font = F(bold=True)
+    for k, g, lab, u, src in ITEMS:
+        c = ws_.cell(1, COLIDX[k], f'{lab} ({u})'); c.font = F(bold=True); c.alignment = Alignment(wrap_text=True, vertical='top')
+    for i, r in Dx.iterrows():
+        row = i + 2; ws_.cell(row, 1, r.Date.to_pydatetime()).number_format = 'yyyy-mm-dd'; ws_.cell(row, 1).font = BLACK
+        ws_.cell(row, 2, r.Period).font = BLACK
+        for k in KEYS:
+            v = r[k]; c = ws_.cell(row, COLIDX[k], None if pd.isna(v) else round(float(v), 2)); c.font = BLUE
+            c.number_format = '#,##0.00' if k in ('gas',) else ('#,##0.0' if k in ('t_max', 't_avg', 'w100', 'rad', 'cloud', 'w_cf', 'px_flat', 'px_pk', 'px_max', 'da_pk', 'da_flat', 'pk_minus_da', 'midc') else '#,##0')
+            if r.Period == 'Tomorrow': c.fill = YEL
+        if r.Period == 'Tomorrow': ws_.cell(row, 1).fill = YEL; ws_.cell(row, 2).fill = YEL
+    CHx = {}; n = len(Dx); c0 = len(KEYS) + 4
+    ws_.cell(1, c0 - 1, 'Chart label').font = F(bold=True)
+    for i, r in Dx.iterrows(): ws_.cell(i + 2, c0 - 1, r.Date.strftime('%d-%b')).font = BLACK
+    for j, k in enumerate(CH_KEYS):
+        ca, cb = c0 + 2*j, c0 + 2*j + 1; CHx[k] = (ca, cb); lab = SHORT[k]
+        ws_.cell(1, ca, lab).font = F(bold=True, color='808080'); ws_.cell(1, cb, f'{lab} outlook').font = F(bold=True, color='808080')
+        for i, r in Dx.iterrows():
+            v = r[k]; v = None if pd.isna(v) else round(float(v), 2)
+            isO = split and r.Period == 'Outlook'; last14 = split and (not isO) and (i + 1 < n) and Dx.iloc[i + 1].Period == 'Outlook'
+            ws_.cell(i + 2, ca, None if isO else v).font = F(color='808080'); ws_.cell(i + 2, cb, v if (isO or last14) else None).font = F(color='808080')
+    ws_.freeze_panes = 'C2'; ws_.column_dimensions['A'].width = 12; ws_.column_dimensions['B'].width = 10
+    for k in KEYS: ws_.column_dimensions[CL(COLIDX[k])].width = 16
+    ws_.row_dimensions[1].height = 60
+    return CHx
+ws = wb.active; ws.title = 'Data'; CH = write_data(ws, D, True)
+ws1 = wb.create_sheet('Data_1y'); CH1 = write_data(ws1, D1, False)
+ws2 = wb.create_sheet('Data_2y'); CH2 = write_data(ws2, D2, False)
 rng = lambda k: f"Data!${CL(COLIDX[k])}${DL}:${CL(COLIDX[k])}${DH}"; DATES = f"Data!$A${DL}:$A${DH}"
 
 # --------------------------------------------------------------- Summary -----
@@ -342,99 +419,163 @@ ch.add_data(Reference(sc, min_col=12, min_row=15, max_row=39), titles_from_data=
 ch.set_categories(Reference(sc, min_col=1, min_row=16, max_row=39)); ch.y_axis.title = '$/MWh'; sc.add_chart(ch, 'J42')
 
 # ----------------------------------------------------------------- Charts ----
-cs = wb.create_sheet('Charts', 2)
-cs['A1'] = f'How things are projecting: last 30 days (actual / known at the bid) and the next 14 (tomorrow {TOM:%Y-%m-%d} + 13, AESO schedules and forecasts)'; cs['A1'].font = F(bold=True, size=12)
-cs['A2'] = 'Forward values are forecasts / schedules; prices and actuals stop at the last finished day. Scatter charts use the last 30 days only.'
-def line(title, keys, anchor, ytitle='MW', bar=False):
-    c = BarChart() if bar else LineChart(); c.title = title; c.height, c.width = 7.5, 17; c.y_axis.title = ytitle
-    for k in keys: c.add_data(Reference(ws, min_col=COLIDX[k], min_row=1, max_row=DH), titles_from_data=True)
-    c.set_categories(Reference(ws, min_col=1, min_row=DL, max_row=DH)); c.x_axis.number_format = 'mm-dd'
-    if bar: c.grouping = 'stacked'; c.overlap = 100
-    cs.add_chart(c, anchor)
-line('Load: daily peak, forecast vs actual', ['lf_pk', 'la_pk'], 'A4')
-line('Baseload gas and simple cycle available (HE8-23 avg)', ['th_av', 'sc_av'], 'K4')
-line('Thermal MW unavailable in the 90-day report, and trips', ['plan_out', 'trip'], 'U4', bar=True)
-line('Cushion: tightest HE8-23 vs the tight line', ['cush_min', 'cush_avg', 'tight'], 'A20')
-line('Thermal remaining, tightest HE8-23', ['rem_min'], 'K20')
-line('Wind: forecast vs actual (HE8-23 avg)', ['w_fc', 'w_act'], 'U20')
-line('Pool price: HE8-23 avg vs day-ahead forward', ['px_pk', 'da_pk'], 'A36', '$/MWh')
-line('Peak settle - day-ahead forward (+ = buys won)', ['pk_minus_da'], 'K36', '$/MWh', bar=True)
-line('Imports: ATC and actual net imports', ['atc', 'ni'], 'U36')
-line('Temperature, province avg: max and mean', ['t_max', 't_avg'], 'A52', 'deg C')
-line('Wind at 100 m, province avg (HE8-23)', ['w100'], 'K52', 'km/h')
-line('Mid-C and AB-NIT gas', ['midc'], 'U52', 'USD/MWh')
-def scatter(title, kx, ky, anchor):
-    c = ScatterChart(); c.title = title; c.style = 13; c.height, c.width = 7.5, 17; c.x_axis.title = ITEMS[KEYS.index(kx)][2]; c.y_axis.title = ITEMS[KEYS.index(ky)][2]
-    xr = Reference(ws, min_col=COLIDX[kx], min_row=DL, max_row=DL+NH-1); yr = Reference(ws, min_col=COLIDX[ky], min_row=DL, max_row=DL+NH-1)
-    s = Series(yr, xr, title='last 30 days'); s.marker.symbol = 'circle'; s.graphicalProperties.line.noFill = True; c.series.append(s); cs.add_chart(c, anchor)
-scatter('Tightest cushion vs peak settle - forward (last 30 days)', 'cush_min', 'pk_minus_da', 'A68')
-scatter('Wind miss vs peak settle - forward', 'w_miss', 'pk_minus_da', 'K68')
-scatter('Load miss vs peak settle - forward', 'l_miss', 'pk_minus_da', 'U68')
-scatter('Thermal remaining vs pool price HE8-23', 'rem_min', 'px_pk', 'A84')
+from openpyxl.drawing.line import LineProperties
+def write_charts(name, pos, ws_, CHx, Dx, TOM_, split, cap1, cap2):
+    cs = wb.create_sheet(name, pos); DHx = len(Dx) + 1
+    def line(title, keys, anchor, ytitle='MW', bar=False):
+        c = BarChart() if bar else LineChart(); c.title = title; c.height, c.width = 7.5, 17; c.y_axis.title = ytitle
+        for k in keys:
+            ca, cb = CHx[k]
+            c.add_data(Reference(ws_, min_col=ca, min_row=1, max_row=DHx), titles_from_data=True)
+            if split: c.add_data(Reference(ws_, min_col=cb, min_row=1, max_row=DHx), titles_from_data=True)
+        c.set_categories(Reference(ws_, min_col=len(KEYS) + 3, min_row=DL, max_row=DHx))
+        c.x_axis.tickLblSkip = 7; c.x_axis.tickMarkSkip = 7; c.x_axis.delete = False; c.y_axis.delete = False; c.x_axis.number_format = 'dd-mmm'
+        c.legend.position = 'b'
+        if bar: c.grouping = 'stacked'; c.overlap = 100
+        else:
+            for i, sr in enumerate(c.series):
+                sr.smooth = False
+                if split and i % 2 == 1: sr.graphicalProperties.line.dashStyle = 'dash'
+        cs.add_chart(c, anchor)
+    def scatter(title, kx, ky, anchor):
+        c = ScatterChart(); c.title = title; c.style = 13; c.height, c.width = 7.5, 17; c.x_axis.title = ITEMS[KEYS.index(kx)][2]; c.y_axis.title = ITEMS[KEYS.index(ky)][2]
+        c.x_axis.delete = False; c.y_axis.delete = False
+        xr = Reference(ws_, min_col=COLIDX[kx], min_row=DL, max_row=DL+NH-1); yr = Reference(ws_, min_col=COLIDX[ky], min_row=DL, max_row=DL+NH-1)
+        s_ = Series(yr, xr, title=f'{NH} days before {TOM_:%d-%b-%Y}'); s_.marker.symbol = 'circle'; s_.marker.size = 4; s_.graphicalProperties.line.noFill = True; c.series.append(s_); cs.add_chart(c, anchor)
+    cs['A1'] = cap1; cs['A1'].font = F(bold=True, size=12); cs['A2'] = cap2
+    line('Load: daily peak, forecast vs actual', ['lf_pk', 'la_pk'], 'A4')
+    line('Baseload gas and simple cycle available (HE8-23 avg)', ['th_av', 'sc_av'], 'K4')
+    line('Thermal MW unavailable in the 90-day report, and trips', ['plan_out', 'trip'], 'U4', bar=True)
+    line('Cushion: tightest HE8-23 vs the tight line', ['cush_min', 'cush_avg', 'tight'], 'A20')
+    line('Thermal remaining, tightest HE8-23', ['rem_min'], 'K20')
+    line('Wind: forecast vs actual (HE8-23 avg)', ['w_fc', 'w_act'], 'U20')
+    line('Pool price: HE8-23 avg vs day-ahead forward', ['px_pk', 'da_pk'], 'A36', '$/MWh')
+    line('Peak settle - day-ahead forward (+ = buys won)', ['pk_minus_da'], 'K36', '$/MWh', bar=True)
+    line('Imports: ATC and net imports', ['atc', 'ni'], 'U36')
+    line('Temperature, province avg: max and mean', ['t_max', 't_avg'], 'A52', 'deg C')
+    line('Wind at 100 m, province avg (HE8-23)', ['w100'], 'K52', 'km/h')
+    line('Mid-C and AB-NIT gas', ['midc'], 'U52', 'USD/MWh')
+    scatter(f'Tightest cushion vs peak settle - forward ({NH} days)', 'cush_min', 'pk_minus_da', 'A68')
+    scatter('Wind miss vs peak settle - forward', 'w_miss', 'pk_minus_da', 'K68')
+    scatter('Load miss vs peak settle - forward', 'l_miss', 'pk_minus_da', 'U68')
+    scatter('Thermal remaining vs pool price HE8-23', 'rem_min', 'px_pk', 'A84')
+    return cs
+cs = write_charts('Charts', 2, ws, CH, D, TOM, True,
+    f'Last {NH} days (solid), next 14 days forecast (solid, past the last actual) and the outlook to day 30 (dashed). Tomorrow = {TOM:%Y-%m-%d}.',
+    'Forward: AESO load / wind / solar forecasts and gencap for 14 days, Tesla load to where it reaches, then the same-weekday level of the last 4 weeks. Wind past the 216-h feed: ECMWF outlook if fresh, else wind MW from the 100 m wind-speed forecast (capacity factor by speed, last 365 days), else the calendar-month normal. Weather: Open-Meteo 16-day forecast (wx_fcst.py), then the day-of-year normal. Thermal past gencap = the last gencap day moved by the 90-day outage report. Net imports at the 30-day mean.')
+T1, T2 = TOM - pd.DateOffset(years=1), TOM - pd.DateOffset(years=2)
+write_charts('Charts_1y', 3, ws1, CH1, D1, T1, False, f'The same window one year ago: {T1 - pd.Timedelta(days=NH):%d-%b-%Y} to {T1 + pd.Timedelta(days=NF):%d-%b-%Y} (all actuals; forecasts are the day-ahead vintages of the time).', 'Data on the Data_1y tab.')
+write_charts('Charts_2y', 4, ws2, CH2, D2, T2, False, f'The same window two years ago: {T2 - pd.Timedelta(days=NH):%d-%b-%Y} to {T2 + pd.Timedelta(days=NF):%d-%b-%Y} (all actuals). The composition feed starts 2024-08-31, so earlier days are blank.', 'Data on the Data_2y tab.')
 
-# --------------------------------------------------------------- Historical --
-# One row per settled day since the composition feed starts. Same frames, same definitions
-# as the Data tab (peak = HE8-23, cushion / thermal remaining as above), so a date that is
-# on both tabs shows the same numbers on both.
-x = C[C.d < TOM].copy(); pk = x[PK(x.he)]
-gd, gp = x.groupby('d'), pk.groupby('d')
-HD = pd.DataFrame({
-    'la_pk': gd.ail.max(), 'la_avg': gp.ail.mean(),
-    'w_act': gp.wind.mean(), 'w_day': gd.wind.mean(), 'wcap': gd.wcap.mean(),
-    'sol_max': gd.solar.max(),
-    'th_av': gp.thermal.mean(), 'sc_av': gp.sc.mean(), 'hydro': gd.hydro.mean(), 'ni': gd.net_imports_actual_scheduled.mean(),
-    'cush_min': gp.cush.min(), 'cush_avg': gp.cush.mean(), 'rem_min': gp.rem.min(),
-    'trip': -gd.thermal.apply(lambda g: g.diff().min()),
-    'px_n': gd.price.count(), 'px_flat': gd.price.mean(), 'px_pk': gp.price.mean(), 'px_ll': x[~PK(x.he)].groupby('d').price.mean(), 'px_max': gd.price.max(), 'n100': gd.price.apply(lambda g: int((g > 100).sum())),
-})
-HD = HD[HD.px_n >= 20].drop(columns='px_n')
-HD['w_cf'] = 100*HD.w_day/HD.wcap
-wg = wx[wx.d < TOM].groupby('d'); HD['t_max'] = wg.temp.max(); HD['t_avg'] = wg.temp.mean(); HD['w100'] = wx[(wx.d < TOM) & PK(wx.he)].groupby('d').wind.mean()
-HD['da_pk'] = da['XDQ'].reindex(HD.index) if 'XDQ' in da else np.nan; HD['da_flat'] = da['XDT'].reindex(HD.index) if 'XDT' in da else np.nan
-HD['gas'] = nb['XBG'].reindex(HD.index) if fe is not None and 'XBG' in nb else np.nan
-HD['midc'] = nb['MPD'].reindex(HD.index) if fe is not None and 'MPD' in nb else np.nan
-HD = HD.sort_index(ascending=False)
-# cross-check against the Data tab: same day, same number
-chk = D[D.Period == 'History'].set_index('Date')
-for k in ('la_pk', 'w_act', 'th_av', 'sc_av', 'cush_min', 'cush_avg', 'rem_min', 'px_flat', 'px_pk', 'px_max', 'n100', 'ni', 'trip', 'w_cf'):
-    both = chk[k].dropna().index.intersection(HD.index); dif = (chk.loc[both, k] - HD.loc[both, k]).abs().max() if len(both) else 0
-    assert dif < 0.01, ('Historical differs from Data', k, dif)
+# ------------------------------------------------------------ History -------
+# Two views of every settled hour / day since the composition feed starts, from
+# the same frames the model reads. Hourly = one row per HE; Daily = the day's
+# averages (load peak and tightest cushion as extra columns).
+import zipfile
+tesla = vint('load_fc', 'Load', 12, 40, 'Tesla')
+H = C[C.d < TOM].copy()
+H['load_aeso'] = lfc.v.reindex(H.index); H['load_tesla'] = tesla.reindex(H.index)
+H['temp'] = wx.set_index('ts').temp.reindex(H.index)
+# import ATC by hour: from the archived intertie feeds (day-ahead vintage where one exists)
+atc_rows = {}
+for z in sorted((U/'archive').glob('*.zip')):
+    try:
+        zd = pd.Timestamp(z.stem)
+        with zipfile.ZipFile(z) as zf:
+            if 'intertie.json' not in zf.namelist(): continue
+            J = json.loads(zf.read('intertie.json').decode('utf-8-sig'))['return']
+    except Exception: continue
+    for g_, al in J.items():
+        if not isinstance(al, dict) or 'Allocations' not in al or g_ in ('BcMatlFlowgate', 'SystemlFlowgate'): continue
+        for a_ in al['Allocations']:
+            t = pd.Timestamp(a_['date']) + pd.Timedelta(hours=int(a_['he'])-1)
+            if isinstance(a_.get('import'), dict) and t.normalize() >= zd:
+                atc_rows.setdefault((t, zd), 0.0); atc_rows[(t, zd)] += float(a_['import'].get('atc') or 0)
+if atc_rows:
+    A = pd.Series(atc_rows); A.index.names = ['t', 'zd']; A = A.reset_index()
+    A['lead'] = (A.t.dt.normalize() - A.zd).dt.days
+    A = A[A.lead >= 0].sort_values('lead').groupby('t')[0].first()      # closest vintage on or before the day
+    H['atc'] = A.reindex(H.index)
+else: H['atc'] = np.nan
+# the model's own hourly call, day-ahead vintage, from the forecast journal (only from when the journal starts)
+jf = U/'verify/hourly.csv'
+if jf.exists():
+    J = pd.read_csv(jf, parse_dates=['published', 'target'])
+    J = J[J.lead_h > 0].copy(); J['da'] = J.published.dt.normalize() < J.target.dt.normalize()
+    J = J.sort_values(['da', 'published']).groupby('target').last()          # prefer a vintage published the day before
+    for k in ('p25', 'p50', 'p75', 'p90', 'ev'): H[k] = J[k].reindex(H.index)
+else:
+    for k in ('p25', 'p50', 'p75', 'p90', 'ev'): H[k] = np.nan
+H = H.sort_index(ascending=False)
 
 HCOLS = [  # key, header, format
- ('px_flat', 'Avg price 7x24 ($/MWh)', '#,##0.0'), ('px_pk', 'HL price HE8-23 ($/MWh)', '#,##0.0'), ('px_ll', 'LL price HE1-7, 24 ($/MWh)', '#,##0.0'),
- ('t_max', 'Max temp, province avg (C)', '0.0'), ('t_avg', 'Mean temp, province avg (C)', '0.0'),
- ('la_pk', 'Load peak (MW)', '#,##0'), ('la_avg', 'Load HE8-23 avg (MW)', '#,##0'),
- ('w_act', 'Wind HE8-23 avg (MW)', '#,##0'), ('w_day', 'Wind daily avg (MW)', '#,##0'), ('wcap', 'Wind capacity, rolling max (MW)', '#,##0'), ('w_cf', 'Wind capacity factor (%)', '0.0'), ('calm', 'Calm / Windy', '@'),
- ('sol_max', 'Solar daily max (MW)', '#,##0'), ('hydro', 'Hydro daily avg (MW)', '#,##0'), ('ni', 'Net imports daily avg (MW)', '#,##0'),
- ('th_av', 'Baseload gas available HE8-23 (MW)', '#,##0'), ('sc_av', 'Simple cycle available HE8-23 (MW)', '#,##0'), ('trip', 'Largest hourly drop in baseload gas (MW)', '#,##0'),
- ('cush_min', 'Cushion, tightest HE8-23 (MW)', '#,##0'), ('cush_avg', 'Cushion HE8-23 avg (MW)', '#,##0'), ('rem_min', 'Thermal remaining, tightest HE8-23 (MW)', '#,##0'),
- ('gas', 'AB-NIT gas ($/GJ)', '#,##0.00'), ('midc', 'Mid-C (USD/MWh)', '#,##0.0'),
- ('w100', 'Wind at 100 m HE8-23 (km/h)', '0.0'),
+ ('temp', 'Temp, province avg (C)', '0.0'),
+ ('load_tesla', 'Load fc Tesla (MW)', '#,##0'), ('load_aeso', 'Load fc AESO (MW)', '#,##0'), ('ail', 'Load actual (MW)', '#,##0'),
+ ('cogen', 'Cogen (MW)', '#,##0'), ('cc', 'Comb cycle (MW)', '#,##0'), ('gfs', 'Gas steam (MW)', '#,##0'), ('sc', 'Simple cycle (MW)', '#,##0'),
+ ('wind', 'Wind (MW)', '#,##0'), ('solar', 'Solar (MW)', '#,##0'),
+ ('atc', 'Import ATC (MW)', '#,##0'), ('net_imports_actual_scheduled', 'Net imports (MW)', '#,##0'),
+ ('rem', 'MW before simple cycle (MW)', '#,##0'), ('cush', 'Cushion (MW)', '#,##0'),
+ ('p25', 'P25 ($/MWh)', '#,##0.0'), ('p50', 'P50 ($/MWh)', '#,##0.0'), ('p75', 'P75 ($/MWh)', '#,##0.0'), ('p90', 'P90 ($/MWh)', '#,##0.0'), ('ev', 'Fair value ($/MWh)', '#,##0.0'),
+ ('price', 'Pool price ($/MWh)', '#,##0.0'),
 ]
-hs = wb.create_sheet('Historical')
-hs['A1'] = 'Historical: every settled day, the fundamentals as the model sees them, and what the pool did'; hs['A1'].font = F(bold=True, size=12)
-hs['A2'] = 'Same feeds and definitions as the Data tab. Blue = written by the script. Change the yellow cells to pull the days that looked like the one you are trading; the Match column marks them (filter on it).'
+def sheet_rows(ws_, top, frame, first_cols, getters):
+    for j, h in enumerate(first_cols + [h for _, h, _ in HCOLS], 1):
+        c = ws_.cell(top-1, j, h); c.font = F(bold=True); c.fill = HDR; c.alignment = Alignment(wrap_text=True, vertical='top')
+    for n, (idx, r) in enumerate(frame.iterrows()):
+        row = top + n
+        for j, v in enumerate(getters(idx, r), 1):
+            c = ws_.cell(row, j, v); c.font = BLACK
+            if j == 1: c.number_format = 'yyyy-mm-dd'
+        for j, (k, h, nf) in enumerate(HCOLS, len(first_cols)+1):
+            v = r.get(k); c = ws_.cell(row, j, None if (v is None or pd.isna(v)) else round(float(v), 2)); c.font = BLUE; c.number_format = nf
+    ws_.row_dimensions[top-1].height = 45
+    for j in range(1, len(first_cols)+len(HCOLS)+1): ws_.column_dimensions[CL(j)].width = 12
+
+# ---- Hourly
+hh = wb.create_sheet('History_Hourly')
+hh['A1'] = 'History, hourly: every settled hour since the feed starts (newest day first, HE1-24)'; hh['A1'].font = F(bold=True, size=12)
+hh['A2'] = 'Same feeds and definitions as the model. MW before simple cycle = baseload gas (cogen + CC + GFS) available minus what it must serve after wind, solar, imports, hydro, storage and bio. Cushion = gas + SC + bio + wind + solar - (load - net imports). P25-P90 and fair value = the model\'s day-ahead call for that hour from the forecast journal (verify\\hourly.csv), blank before it started. Import ATC from the archived intertie feeds, blank before the archive started.'
+Hh = H.copy(); Hh['he_'] = Hh.he; Hh = Hh.sort_values(['d', 'he_'], ascending=[False, True])
+sheet_rows(hh, 5, Hh, ['Date', 'HE'], lambda idx, r: [idx.normalize().to_pydatetime(), int(r.he)])
+hh.freeze_panes = 'C5'; hh.auto_filter.ref = f'A4:{CL(2+len(HCOLS))}{4+len(Hh)}'
+NHH = len(Hh)
+
+# ---- Daily
+x = H; pk = x[PK(x.he)]; gd, gp = x.groupby('d'), pk.groupby('d')
+HD = gd[[k for k, *_ in HCOLS]].mean()
+HD['load_pk'] = gd.ail.max(); HD['cush_min'] = gp.cush.min(); HD['rem_min'] = gp.rem.min(); HD['px_pk'] = gp.price.mean(); HD['px_ll'] = x[~PK(x.he)].groupby('d').price.mean()
+HD['t_max'] = gd.temp.max(); HD['n'] = gd.price.count(); HD = HD[HD.n >= 20].sort_index(ascending=False)
+HD['wcap'] = gd.wcap.mean(); HD['w_cf'] = 100*HD.wind/HD.wcap
+# cross-check against the Data tab
+chk = D[D.Period == 'History'].set_index('Date')
+for a_, b_ in (('la_pk', 'load_pk'), ('cush_min', 'cush_min'), ('rem_min', 'rem_min'), ('px_flat', 'price'), ('px_pk', 'px_pk')):
+    both = chk[a_].dropna().index.intersection(HD.index); dif = (chk.loc[both, a_] - HD.loc[both, b_]).abs().max() if len(both) else 0
+    assert dif < 0.01, ('History_Daily differs from Data', a_, dif)
+hs = wb.create_sheet('History_Daily')
+hs['A1'] = 'History, daily: the day\'s averages of the hourly view, plus load peak, tightest cushion, HL / LL price'; hs['A1'].font = F(bold=True, size=12)
+hs['A2'] = 'Change the yellow cells to pull the days that looked like the one you are trading; Match = 1 marks them (filter on it) and they are listed at the top right.'
+EXTRA = [('load_pk', 'Load peak (MW)', '#,##0'), ('cush_min', 'Cushion, tightest HE8-23 (MW)', '#,##0'), ('rem_min', 'MW before SC, tightest HE8-23 (MW)', '#,##0'),
+         ('px_pk', 'HL price HE8-23 ($/MWh)', '#,##0.0'), ('px_ll', 'LL price HE1-7, 24 ($/MWh)', '#,##0.0'), ('t_max', 'Max temp (C)', '0.0'), ('w_cf', 'Wind capacity factor (%)', '0.0'), ('calm', 'Calm / Windy', '@')]
+TOP, HRH = 16, 15; N = len(HD); BOT = TOP + N - 1
+allcols = [('Date', '', ''), ('Month', '', ''), ('Match', '', ''), ('Rank', '', '')] + HCOLS + EXTRA
+col = {k: i+1 for i, (k, *_ ) in enumerate(allcols)}
+def hr(k): return f"${CL(col[k])}${TOP}:${CL(col[k])}${BOT}"
 lab = [('Cushion, tightest HE8-23 (MW)', None, 'defaults to tomorrow from Summary; overwrite'), ('Cushion band, +/- (MW)', 300, ''),
        ('Month (1-12)', None, 'defaults to tomorrow'), ('Months either side', 1, '0 = same month only'), ('Wind (Any / Calm / Windy)', 'Any', 'Calm = capacity factor below 16%')]
-HR0, HRH, TOP = 14, 15, 16          # panel rows 4-11, headers row 15, first data row 16
-N = len(HD); BOT = TOP + N - 1
-col = {k: i+1 for i, (k, *_ ) in enumerate([('Date', '', ''), ('Month', '', ''), ('Match', '', ''), ('Rank', '', '')] + HCOLS)}
-def hr(k): return f"${CL(col[k])}${TOP}:${CL(col[k])}${BOT}"
 for i, (t, v, note) in enumerate(lab):
     r = 4 + i; hs.cell(r, 1, t).font = BLACK; c = hs.cell(r, 3, v); c.fill = YEL; c.font = BLUE; hs.cell(r, 4, note).font = F(color='808080', size=9)
 hs['C4'] = f"=Summary!D{SUMROW['cush_min']}"; hs['C6'] = '=MONTH(Summary!$D$2)'
 hs['F3'] = 'Days that matched'; hs['F3'].font = F(bold=True)
-outs = [('Days', f'=COUNTIF({hr("Match")},1)', '0'), ('Avg price 7x24', f'=IFERROR(AVERAGEIFS({hr("px_flat")},{hr("Match")},1),"")', '#,##0.0'),
+outs = [('Days', f'=COUNTIF({hr("Match")},1)', '0'), ('Avg price 7x24', f'=IFERROR(AVERAGEIFS({hr("price")},{hr("Match")},1),"")', '#,##0.0'),
         ('Avg HL', f'=IFERROR(AVERAGEIFS({hr("px_pk")},{hr("Match")},1),"")', '#,##0.0'), ('Avg LL', f'=IFERROR(AVERAGEIFS({hr("px_ll")},{hr("Match")},1),"")', '#,##0.0'),
-        ('Highest avg price', f'=IFERROR(_xlfn.MAXIFS({hr("px_flat")},{hr("Match")},1),"")', '#,##0.0'), ('Lowest avg price', f'=IFERROR(_xlfn.MINIFS({hr("px_flat")},{hr("Match")},1),"")', '#,##0.0'),
+        ('Highest avg price', f'=IFERROR(_xlfn.MAXIFS({hr("price")},{hr("Match")},1),"")', '#,##0.0'), ('Lowest avg price', f'=IFERROR(_xlfn.MINIFS({hr("price")},{hr("Match")},1),"")', '#,##0.0'),
         ('Avg cushion, tightest', f'=IFERROR(AVERAGEIFS({hr("cush_min")},{hr("Match")},1),"")', '#,##0'), ('Avg max temp', f'=IFERROR(AVERAGEIFS({hr("t_max")},{hr("Match")},1),"")', '0.0')]
 for i, (t, fm, nf) in enumerate(outs):
     r = 4 + i; hs.cell(r, 6, t).font = BLACK; c = hs.cell(r, 7, fm); c.number_format = nf; c.font = BLACK
-# the matched days themselves, listed (up to NL), via a rank helper column
 NL = 60
 hs['I3'] = 'The days it matched (newest first)'; hs['I3'].font = F(bold=True)
 mh = ['#', 'Date', 'Avg price', 'HL', 'LL', 'Cushion tightest', 'Max temp', 'Wind CF %', 'Calm / Windy']
-mk = [None, None, 'px_flat', 'px_pk', 'px_ll', 'cush_min', 't_max', 'w_cf', 'calm']
+mk = [None, None, 'price', 'px_pk', 'px_ll', 'cush_min', 't_max', 'w_cf', 'calm']
 for j, h in enumerate(mh): c = hs.cell(4, 9+j, h); c.font = F(bold=True); c.fill = HDR
 for i in range(NL):
     r = 5 + i; hs.cell(r, 9, i+1).number_format = '0'
@@ -442,11 +583,9 @@ for i in range(NL):
     for j, k in enumerate(mk):
         if k is None: continue
         c = hs.cell(r, 9+j, f'=IFERROR(INDEX({hr(k)},MATCH($I{r},{hr("Rank")},0)),"")'); c.number_format = '#,##0.0' if k != 'calm' else '@'
-hs.cell(13, 1, 'Analog avg = the average 7x24 price of the other days in the same calendar month with a tightest cushion within the band above. Anomaly = this day minus that.').font = F(color='808080', size=9)
-heads = ['Date', 'Month', 'Match', 'Match #'] + [h for _, h, _ in HCOLS] + ['Analog avg 7x24 ($/MWh)', 'Anomaly vs analogs ($/MWh)']
+heads = ['Date', 'Month', 'Match', 'Match #'] + [h for _, h, _ in HCOLS] + [h for _, h, _ in EXTRA]
 for j, h in enumerate(heads, 1):
     c = hs.cell(HRH, j, h); c.font = F(bold=True); c.fill = HDR; c.alignment = Alignment(wrap_text=True, vertical='top')
-cA, cB = len(heads) - 1, len(heads)
 for n, (d, r) in enumerate(HD.iterrows()):
     row = TOP + n
     hs.cell(row, 1, d.to_pydatetime()).number_format = 'yyyy-mm-dd'; hs.cell(row, 1).font = BLACK
@@ -454,30 +593,22 @@ for n, (d, r) in enumerate(HD.iterrows()):
     cu, mo, wc = f'{CL(col["cush_min"])}{row}', f'B{row}', f'{CL(col["calm"])}{row}'
     hs.cell(row, 3, f'=IF(AND(ISNUMBER({cu}),ISNUMBER($C$4),ABS({cu}-$C$4)<=$C$5,ABS(MOD({mo}-$C$6+6,12)-6)<=$C$7,OR($C$8="Any",{wc}=$C$8)),1,0)').number_format = '0'
     hs.cell(row, 4, f'=IF(C{row}=1,COUNTIF($C${TOP}:C{row},1),"")').number_format = '0'
-    for k, h, nf in HCOLS:
-        j = col[k]
-        if k == 'spike': v = int(r.px_max >= 300) if pd.notna(r.px_max) else None
-        elif k == 'calm': v = ('Calm' if r.w_cf < 100*CF_CALM else 'Windy') if pd.notna(r.w_cf) else None
-        elif k == 'pk_minus_da': v = (r.px_pk - r.da_pk) if pd.notna(r.da_pk) and pd.notna(r.px_pk) else None
+    for k, h, nf in HCOLS + EXTRA:
+        if k == 'calm': v = ('Calm' if r.w_cf < 100*CF_CALM else 'Windy') if pd.notna(r.w_cf) else None
         else:
-            v = r[k]; v = None if pd.isna(v) else round(float(v), 2)
-        c = hs.cell(row, j, v); c.font = BLUE; c.number_format = nf
-    fl = CL(col['px_flat']); cm = CL(col['cush_min'])
-    hs.cell(row, cA, f'=IFERROR(AVERAGEIFS({hr("px_flat")},{hr("cush_min")},">="&{cu}-$C$5,{hr("cush_min")},"<="&{cu}+$C$5,{hr("Month")},{mo},$A${TOP}:$A${BOT},"<>"&A{row}),"")').number_format = '#,##0.0'
-    hs.cell(row, cB, f'=IF(AND(ISNUMBER({fl}{row}),ISNUMBER({CL(cA)}{row})),{fl}{row}-{CL(cA)}{row},"")').number_format = '#,##0.0'
+            v = r.get(k); v = None if (v is None or pd.isna(v)) else round(float(v), 2)
+        c = hs.cell(row, col[k], v); c.font = BLUE; c.number_format = nf
 hs.conditional_formatting.add(f'C{TOP}:C{BOT}', CellIsRule(operator='equal', formula=['1'], fill=PatternFill('solid', fgColor='FFF2CC')))
-hs.conditional_formatting.add(f'{CL(cB)}{TOP}:{CL(cB)}{BOT}', CellIsRule(operator='greaterThan', formula=['40'], fill=PatternFill('solid', fgColor='F8CBAD')))
-hs.conditional_formatting.add(f'{CL(cB)}{TOP}:{CL(cB)}{BOT}', CellIsRule(operator='lessThan', formula=['-40'], fill=PatternFill('solid', fgColor='C6E0B4')))
-hs.freeze_panes = f'E{TOP}'; hs.row_dimensions[HRH].height = 60; hs.auto_filter.ref = f'A{HRH}:{CL(cB)}{BOT}'
-for j in range(1, cB+1): hs.column_dimensions[CL(j)].width = 13
-hs.column_dimensions['B'].width = 7; hs.column_dimensions['C'].width = 7; hs.column_dimensions['D'].width = 8
-hs.column_dimensions['A'].width = 30; hs.column_dimensions['F'].width = 22
-sc2 = ScatterChart(); sc2.title = 'Tightest cushion vs pool price HE8-23, all history'; sc2.style = 13; sc2.height, sc2.width = 9, 16
+hs.freeze_panes = f'E{TOP}'; hs.row_dimensions[HRH].height = 60; hs.auto_filter.ref = f'A{HRH}:{CL(len(heads))}{BOT}'
+for j in range(1, len(heads)+1): hs.column_dimensions[CL(j)].width = 12
+hs.column_dimensions['A'].width = 30; hs.column_dimensions['F'].width = 22; hs.column_dimensions['B'].width = 7; hs.column_dimensions['C'].width = 7; hs.column_dimensions['D'].width = 8
+sc2 = ScatterChart(); sc2.title = 'Tightest cushion vs HL price, all history'; sc2.style = 13; sc2.height, sc2.width = 9, 16
 sc2.x_axis.title = 'Cushion, tightest HE8-23 (MW)'; sc2.y_axis.title = '$/MWh'
 xs = Reference(hs, min_col=col['cush_min'], min_row=TOP, max_row=BOT); ys = Reference(hs, min_col=col['px_pk'], min_row=TOP, max_row=BOT)
 se = Series(ys, xs, title='days'); se.marker.symbol = 'circle'; se.marker.size = 3; se.graphicalProperties.line.noFill = True; sc2.series.append(se)
 hs.add_chart(sc2, 'S3')
-print('Historical rows', N, 'from', HD.index.min().date(), 'to', HD.index.max().date())
+print('History_Hourly rows', NHH, ' History_Daily rows', N, 'from', HD.index.min().date(), 'to', HD.index.max().date(),
+      ' model calls from', H.ev.dropna().index.min(), ' ATC from', H.atc.dropna().index.min())
 
 # ----------------------------------------------------------------- README ----
 rd = wb.create_sheet('README', 0)
@@ -487,9 +618,10 @@ txt = ['Pre-model checklist (Alberta) -- how to read this workbook', '',
  'Next_14_Days: each of the next 14 days, raw value then the difference vs the last-14 and last-30 means. Red / green = the difference is bigger than one 30-day SD.',
  'Last_30_Days: each of the last 30 days (newest first), raw value then the difference vs the last-14 and last-30 means.',
  "Scenario: change load, wind, solar, baseload gas / simple cycle availability and net imports (optionally for a range of hours) and see tomorrow's cushion, thermal remaining, price forecast and score change by hour.",
- 'Charts: the key series over the last 30 days and the next 14 (forecasts), plus scatter plots of what drove the peak settle against the day-ahead forward over the last 30 days.',
+ 'Charts: the key series over the last 75 days, the next 14 (forecasts) and the outlook to day 30 (dashed), plus scatter plots over the 75 days. Charts_1y / Charts_2y: the same window one and two years earlier, from the Data_1y / Data_2y tabs.',
  'Data: the raw daily numbers (blue = inputs written by the script; yellow row = tomorrow). Every average and difference elsewhere is a formula on this sheet. Green values = links to Data.',
- 'Historical: every settled day since the feed starts (newest first): pool price, fundamentals and cushion as the model saw them. Yellow cells at the top pull the days with a similar cushion (same month, calm / windy); Match = 1 marks them, and each row also shows how it settled against its own analogs (Anomaly).', '',
+ 'History_Hourly: every settled hour (newest day first): temperature, load (Tesla forecast, AESO forecast, actual), cogen / CC / gas steam / simple cycle, wind, solar, import ATC, net imports, MW before simple cycle, cushion, the model\'s P25 / P50 / P75 / P90 and fair value for that hour, and the pool price.',
+ 'History_Daily: the same as daily averages, plus load peak, tightest cushion, HL / LL price. Yellow cells at the top pull the days with a similar cushion (same month, calm / windy); Match = 1 marks them and they are listed at the top right.', '',
  'What each row is',
  "History rows use what was known at the day-ahead vintage (AESO load / wind forecasts issued 12-40 h ahead) plus what then happened (actual load, wind, availability, pool price).",
  "Tomorrow and forward rows use AESO's 14-day load forecast, the 216-hour wind and solar forecasts (ECMWF outlook beyond them), the gencap available-capability feed (15 days) and the 90-day outage report.",

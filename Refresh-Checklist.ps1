@@ -12,6 +12,9 @@
 param([string]$Day)
 Set-Location $PSScriptRoot
 $tmp = 'Checklist_Deviations_AB.new.xlsx'
+Write-Host 'weather forecast (Open-Meteo, 16 days)...' -ForegroundColor DarkGray
+python wx_fcst.py
+if ($LASTEXITCODE -ne 0) { Write-Host 'wx_fcst.py failed - forward weather will use the last forecast on file, or climatology' -ForegroundColor Yellow }
 if ($Day) { python checklist_ab.py . $tmp $Day } else { python checklist_ab.py . $tmp }
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $tmp)) { Write-Host "checklist build failed - the old workbook is untouched" -ForegroundColor Red; exit 1 }
 try {
