@@ -503,9 +503,11 @@ if jf.exists():
     J = pd.read_csv(jf, parse_dates=['published', 'target'])
     J = J[J.lead_h > 0].copy(); J['da'] = J.published.dt.normalize() < J.target.dt.normalize()
     J = J.sort_values(['da', 'published']).groupby('target').last()          # prefer a vintage published the day before
-    for k in ('p25', 'p50', 'p75', 'p90', 'ev'): H[k] = J[k].reindex(H.index)
+    for k in ('p10', 'p25', 'p50', 'p75', 'p90', 'ev', 'cush_fc'): H[k] = J[k].reindex(H.index)
 else:
-    for k in ('p25', 'p50', 'p75', 'p90', 'ev'): H[k] = np.nan
+    for k in ('p10', 'p25', 'p50', 'p75', 'p90', 'ev', 'cush_fc'): H[k] = np.nan
+import analog_page
+NA = analog_page.write(H.copy(), OUT.parent / 'Cushion_Analogs.html', TOM, CF_CALM); print('Cushion_Analogs.html days', NA)
 H = H.sort_index(ascending=False)
 
 HCOLS = [  # key, header, format

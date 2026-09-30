@@ -2,20 +2,6 @@
 import json, numpy as np, pandas as pd
 from pathlib import Path
 OTHER_MW=1000.0
-_SAY=[print]
-
-def _leadcal(root):
-    p=Path(root)/'model'/'leadcal.json'
-    return json.loads(p.read_text()) if p.exists() else {}
-
-def lead_of(t, today=None):
-    today=today if today is not None else pd.Timestamp.now().normalize()
-    return int((pd.Timestamp(t).normalize()-today).days)
-
-def bucket_of(L, cal):
-    for b in cal.get('buckets',[]):
-        if b['lo']<=L<=b['hi']: return int(b['L'])
-    return int(cal['buckets'][-1]['L']) if cal.get('buckets') and L>cal['buckets'][-1]['hi'] else 0
 
 def _feeds(folder):
     f=Path(folder)
@@ -87,13 +73,6 @@ def _feeds(folder):
     for c in ('cc','sc','cogen','gfs','bio','hydro','stor'):
         if c not in x: x[c]=np.nan
     x['gas']=x[['cc','sc','cogen','gfs']].sum(axis=1)
-    try:
-        import sys as _sys; _sys.path.insert(0,str(Path(__file__).resolve().parent))
-        import extend as _ext
-        x=_ext.extend(x, folder, say=_SAY[0])
-    except Exception as e:
-        _SAY[0](f"14-day extension skipped - {type(e).__name__}: {e}"); x['ext']=0
-    x['gas']=x[['cc','sc','cogen','gfs']].sum(axis=1)
     if atc is not None: x=x.join(atc,how='left')
     else: x['imp']=np.nan; x['exp']=np.nan
     return x
@@ -107,25 +86,8 @@ def frame(root, folder, comp, say):
     IX=np.array([b['cushion'] for b in itb if b.get('med') is not None])
     IY=np.array([b['med'] for b in itb if b.get('med') is not None])
     o=np.argsort(IX); IX,IY=IX[o],IY[o]
-    _SAY[0]=say
     f=_feeds(folder)
     f=f.dropna(subset=['cc','sc','cogen','gfs','bio','load','wind','solar'])
-    # Gencap available capability runs optimistic, more so the further out:
-    # measured against what later showed up, about 100 MW more per day beyond
-    # tomorrow. Tomorrow is left exactly as the validated day-ahead model sees
-    # it; only later forward hours are haircut, spread pro rata across the
-    # four gas types. Settled hours are never touched.
-    cal=_leadcal(root); hc=cal.get('thermal_haircut',{})
-    f['ld']=[lead_of(t) for t in f.index]
-    if hc.get('enabled'):
-        fut=f.price.isna()&(f.ld>=int(hc.get('from_lead',2)))
-        cut=np.minimum(float(hc.get('cap',1000)),float(hc.get('per_day',100))*(f.ld-1)).clip(lower=0)
-        for c in ('cc','sc','cogen','gfs'): f[c]=f[c].astype(float)
-        g4=f[['cc','sc','cogen','gfs']].sum(axis=1).replace(0,np.nan)
-        for c in ('cc','sc','cogen','gfs'):
-            f.loc[fut,c]=(f.loc[fut,c]*(1-cut[fut]/g4[fut])).clip(lower=0)
-        f['gas']=f[['cc','sc','cogen','gfs']].sum(axis=1)
-        if fut.any(): say(f"thermal haircut on {int(fut.sum())} forward hours: {int(cut[fut].min())} to {int(cut[fut].max())} MW by lead")
     f['internal']=f.gas+f.bio+f.wind+f.solar
     curve=np.array([float(np.interp(v,IX,IY)) for v in (f.internal-f['load']-125.0)])
     f['itcurve']=curve
@@ -263,7 +225,6 @@ def forward_table(root, say):
 
 def build(root, folder, d, scored, grid, tr7, comp, load_cor, gates, say, f=None, itb=None, pdays=365):
     if f is None or itb is None: f, itb = frame(root, folder, comp, say)
-    _cal=_leadcal(root)
     hours=[]
     for t,r in f.iterrows():
         if pd.isna(r.wind) or pd.isna(r.solar): continue
@@ -278,8 +239,6 @@ def build(root, folder, d, scored, grid, tr7, comp, load_cor, gates, say, f=None
             if pd.notna(r.get(s)): h[dst]=round(float(r[s]),1)
         hs=sum(float(r[c]) for c in ('hydro','stor') if pd.notna(r.get(c)))
         h['hydstor']=round(hs,1) if hs>0 else OTHER_MW
-        L=lead_of(t); h['ld']=L; h['lb']=bucket_of(max(L,0),_cal) if h['status']=='FORECAST' else 0
-        if int(r.get('ext',0) or 0): h['ext']=1
         hours.append(h)
     # 30-day normal hour
     dr=d[d.index>d.index.max()-pd.Timedelta(days=30)].copy(); dr['he']=dr.index.hour+1
@@ -329,7 +288,7 @@ def build(root, folder, d, scored, grid, tr7, comp, load_cor, gates, say, f=None
           'pool_days':int(pdays),'data_as_of':str(f.index.max()),'last_settled':str(scored.index.max()),
           'curve_mean':round(float(tr7.price.mean()),2),
           'norm_start':str(dr.index.min().date()),'norm_end':str(dr.index.max().date()),
-          'bundle_built':str(pd.Timestamp.now())[:10],'bundle_age_days':0,'leadcal':_cal.get('buckets'),
+          'bundle_built':str(pd.Timestamp.now())[:10],'bundle_age_days':0,
           'gates':{str(k):v for k,v in gates.items()}}
     fwd=forward_table(root, say)
     # Weather-based like-day panel. Deliberately guarded: it depends on a file

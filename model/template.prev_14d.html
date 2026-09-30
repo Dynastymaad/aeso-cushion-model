@@ -515,7 +515,7 @@ const tgroup=he => he<=6?0 : he<=10?1 : he<=16?2 : he<=21?3 : 4;
 
 /* grid lookup: linear in cushion within a time group */
 const G={};
-for(const r of D.grid){ (G[r.g+'|'+(r.L||0)] ||= []).push(r); }
+for(const r of D.grid){ (G[r.g] ||= []).push(r); }
 for(const k in G) G[k].sort((a,b)=>a.c-b.c);
 const BO=(D.meta.gates&&D.meta.gates.bo)?D.meta.gates.bo:null;
 function boBand(c){ if(!BO) return null;
@@ -535,8 +535,8 @@ function boTip(c,side){ const b=boBand(c); if(!b) return '';
   return `${side} at cushion ${b.lab}: realised ${r.toFixed(2)}:1 against a ${t}:1 target over ${b.n} hours — ${v}. `
        + `Net $${b[side+'_net'].toFixed(2)}/MWh, won ${(b[side+'_win']*100).toFixed(0)}% of hours.`; }
 const KEYS=['q10','q25','q50','q75','q90','q95','mean','bid','offer','opt','p50','p100','p300','p700'];
-function look(cush,g,L){
-  const a=G[g+'|'+(L||0)]||G[g+'|0']; const n=a.length;
+function look(cush,g){
+  const a=G[g]; const n=a.length;
   if(cush<=a[0].c) return a[0];
   if(cush>=a[n-1].c) return a[n-1];
   let i=1; while(i<n && a[i].c<cush) i++;
@@ -586,7 +586,7 @@ function compute(h,s){
   const headroom=r3-need;
   const rung = need<=r1?1 : need<=r2?2 : need<=r3?3 : need<=r4?4 : 5;
   return {load,gas,cc,cog,cogen:cog,sc,gfs,wind,solar,it,internal,cushion,g,
-          need,r1,r2,r3,r4,headroom,rung,hydstor,...look(cushion,g,h.lb||0)};
+          need,r1,r2,r3,r4,headroom,rung,hydstor,...look(cushion,g)};
 }
 
 const days=[...new Set(D.hours.map(h=>h.dt.slice(0,10)))]
@@ -967,8 +967,8 @@ function drawWhy(rows,dirty){
 
   let need=null,risk=null;
   const gg=r.scen.g;
-  for(let m2=0;m2<=3000;m2+=25){ if(need===null&&look(A.cushion+m2,gg,r.h.lb||0).p100<0.20) need=m2;
-                                 if(risk===null&&look(A.cushion-m2,gg,r.h.lb||0).p100>0.50) risk=m2; }
+  for(let m2=0;m2<=3000;m2+=25){ if(need===null&&look(A.cushion+m2,gg).p100<0.20) need=m2;
+                                 if(risk===null&&look(A.cushion-m2,gg).p100>0.50) risk=m2; }
   const itShare=A.d.it;
   $('whyText').innerHTML=`
     <p class="lede">${lede}</p>
@@ -1296,7 +1296,7 @@ function drawCrv(rows,dirty){
   const sv=svg(W,H); host.appendChild(sv);
   sv.setAttribute('aria-label','Pool price against supply remaining');
   const cLo=-200,cHi=3200;
-  const pts=(G[g+'|'+(r.h.lb||0)]||G[g+'|0']).filter(p=>p.c>=cLo&&p.c<=cHi);
+  const pts=G[g].filter(p=>p.c>=cLo&&p.c<=cHi);
   // LOG price axis. On a linear axis to $1,000 everything below $200 sits in the
   // bottom fifth of the panel, which is exactly the range you need to read to
   // judge whether an hour reaches $50 or $100. A log axis gives every doubling
@@ -1347,7 +1347,7 @@ function drawCrv(rows,dirty){
   if(dirty) put(r.base.cushion,r.base.q50,'var(--s-base)',`filed ${mw(r.base.cushion)}`);
   put(r.scen.cushion,r.scen.q50,'var(--s-scen)',`HE${r.h.he} · ${mw(r.scen.cushion)} MW`);
 
-  const c0=r.scen.cushion, at=d=>look(c0+d,g,r.h.lb||0).q50;
+  const c0=r.scen.cushion, at=d=>look(c0+d,g).q50;
   $('crvSum').innerHTML=`
     <div class="sumc"><span class="eyebrow">HE${r.h.he} sits at</span>
       <div class="v num">${mw(c0)}<span style="font-size:11px;color:var(--ink-3)"> MW</span></div></div>
@@ -1505,13 +1505,10 @@ document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click'
   Object.assign(S,PRE[b.dataset.preset]);
   SL.forEach(([id,k])=>{$(id).value=S[k];}); $('m_it').value=S.itMode; syncLabels(); render();}));
 $('daybar').innerHTML=days.map(d=>{
-  const hs=D.hours.filter(h=>h.dt.slice(0,10)===d), n=hs.length;
-  const ld=Math.max(...hs.map(h=>h.ld||0)), ext=hs.some(h=>h.ext);
-  const tip=[n<24?`only ${n} of 24 hours published`:'', ld>=2?`day ${ld}: spread widened for lead`:'', ext?'wind / solar past the AESO 216-h feed: wind from the wind-speed forecast shrunk to normal, solar at its 14-day normal':''].filter(Boolean).join(' · ');
+  const n=D.hours.filter(h=>h.dt.slice(0,10)===d).length;
   return `<button class="chip" type="button" data-day="${d}" aria-pressed="${d===day}"${
-    tip?` title="${tip}"`:''} style="${ld>=8?'border-style:dashed':''}">${fmtDay(d)}${
-    n<24?`<span style="opacity:.6;font-weight:400"> · ${n}h</span>`:''}${ld>=8?`<span style="opacity:.6;font-weight:400"> · d${ld}</span>`:''}</button>`;}).join('')
-  + `<div style="flex-basis:100%;font-size:11px;color:var(--ink-3);margin-top:4px">Days 2-14 carry wider price ranges for their lead (cushion error ${(D.meta.leadcal||[]).map(b=>`d${b.lo}${b.hi>b.lo?'-'+b.hi:''} x${b.m.toFixed(2)}`).join(', ')}) and thermal availability haircut by about 100 MW per day beyond tomorrow. Dashed = day 8+: read for direction and range, not the hour.</div>`;
+    n<24?` title="only ${n} of 24 hours published"`:''}>${fmtDay(d)}${
+    n<24?`<span style="opacity:.6;font-weight:400"> · ${n}h</span>`:''}</button>`;}).join('');
 function applyView(){
   document.body.classList.toggle('fundmode',view==='fund');
   document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===view)));

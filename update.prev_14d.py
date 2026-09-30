@@ -875,23 +875,15 @@ def make_grid(d, CAL, HOT, hotratio, gates=None, seed=71):
         for x in LV:
             if x['lo']<=c<x['hi']: return float(x['k'])
         return 1.0
-    # Lead buckets for the 14-day view. Bucket 0 is the day-ahead grid exactly as
-    # before (same draws, same seed order). Later buckets widen the cushion error
-    # by the measured factor for that lead (model/leadcal.json).
-    _lc=ROOT/'model'/'leadcal.json'
-    BK=json.loads(_lc.read_text()).get('buckets') if _lc.exists() else None
-    BK=BK or [{'L':0,'m':1.0}]
     rng=np.random.default_rng(seed); rows=[]
-    for bk in BK:
-      Lb=int(bk['L']); MUL=float(bk['m'])
-      for g in range(5):
+    for g in range(5):
         for c in np.arange(-1200,4401,100):
-            sm=(SB0+SB1*c)+MUL*rng.choice(err,size=4000)
+            sm=(SB0+SB1*c)+rng.choice(err,size=4000)
             bi=np.clip(np.digitize(sm,E)-1,0,NB-1)
             base=curve(XS,YS,sm)
             res=np.array([rng.choice(POOL[(int(b),g)]) for b in bi])
             px=np.clip(np.expm1(np.log1p(base)+res),0,999.99)
-            r={'g':g,'c':int(c),'L':Lb}
+            r={'g':g,'c':int(c)}
             # probabilities below come from the UNSCALED draws, which is the
             # basis their calibration was fitted on. Prices use the corrected
             # ones.
