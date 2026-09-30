@@ -11,7 +11,6 @@
                      first or the deltas compare today with itself.
   2. outage_delta.py what came off or came back for each day of the week
   3. risk.py         next-day withholding risk, opens the HTML page
-  (between 2 and 3: Refresh-Checklist.ps1 rebuilds Checklist_Deviations_AB.xlsx)
 
   Steps 2 and 3 are read-only. If either fails the dashboard is still published.
 #>
@@ -56,10 +55,6 @@ Write-Host "`n=== 2/3  supply changes by day ===" -ForegroundColor Cyan
 python outage_delta.py
 if ($LASTEXITCODE -ne 0) { Write-Host "outage_delta failed (carrying on)" -ForegroundColor Yellow }
 
-Write-Host "`n=== checklist workbook ===" -ForegroundColor DarkCyan
-.\Refresh-Checklist.ps1
-if ($LASTEXITCODE -ne 0) { Write-Host "checklist rebuild failed (carrying on)" -ForegroundColor Yellow }
-
 Write-Host "`n=== 3/3  next-day withholding risk ===" -ForegroundColor Cyan
 if (Test-Path (Join-Path $mp 'risk.py')) {
     Push-Location $mp
@@ -72,5 +67,4 @@ if (Test-Path (Join-Path $mp 'risk.py')) {
 
 Write-Host "`ndone.  dashboard: docs\index.html" -ForegroundColor Green
 Write-Host "       deltas:    outage_delta.csv"
-Write-Host "       checklist: Checklist_Deviations_AB.xlsx"
 Write-Host "       risk:      $mp\risk_nextday.html"
