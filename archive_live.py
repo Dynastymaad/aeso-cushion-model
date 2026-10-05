@@ -53,8 +53,9 @@ def main():
     add('thermal_status.json', HERE / 'cache' / 'thermal_status.json')
     add('wx_fcst.csv', HERE / 'cache' / 'wx_fcst.csv')
     add('outlook.csv', HERE / 'cache' / 'outlook.csv')
-    add('trades.html', HERE / 'docs' / 'trades.html')
+    add('index.html', HERE / 'docs' / 'index.html')   # dashboard incl. the Trades tab data (const T)
     add('leadcal.json', HERE / 'model' / 'leadcal.json')
+    add('risk_today.json', HERE / 'cache' / 'risk_today.json')
     try:
         v = pd.read_csv(HERE / 'cache' / 'supply_vintages_24m.csv'); files['supply_outlook_today.csv'] = v[v.vday.astype(str).str[:10] == str(day.date())].to_csv(index=False)
     except Exception: pass

@@ -22,6 +22,10 @@ Set-Location $PSScriptRoot
 $mp = Join-Path (Split-Path $PSScriptRoot -Parent) 'aeso-market-power'
 
 if (-not $SkipUpdate) {
+    Write-Host "`n=== StormVista wind + solar (days 2-14) ===" -ForegroundColor DarkCyan
+    python pull_stormvista.py
+    if ($LASTEXITCODE -ne 0) { Write-Host "StormVista pull had a FAILURE - days 2-14 wind/solar will fall back to the AESO feed, which is NOT what the backtest used. Re-run: python pull_stormvista.py" -ForegroundColor Red }
+
     Write-Host "`n=== forward thermal (corrected AESO outlook) + daily forwards ===" -ForegroundColor DarkCyan
     python pull_daily_inputs.py
     if ($LASTEXITCODE -ne 0) { Write-Host "pull_daily_inputs had a FAILURE - see logs\pull_daily_inputs.log for the full error. If it was forward thermal, today's page is on the less accurate gencap + haircut fallback." -ForegroundColor Red }
@@ -68,23 +72,27 @@ Write-Host "`n=== days 8-13 weekly signal ===" -ForegroundColor DarkCyan
 python week_signal.py
 if ($LASTEXITCODE -ne 0) { Write-Host "week_signal failed (carrying on)" -ForegroundColor Yellow }
 
+Write-Host "`n=== probabilities (risk engine) ===" -ForegroundColor DarkCyan
+python risk_engine.py
+if ($LASTEXITCODE -ne 0) { Write-Host "risk_engine failed (carrying on) - the Probabilities tab will be empty today" -ForegroundColor Yellow }
+
 Write-Host "`n=== possible trades ===" -ForegroundColor DarkCyan
 python possible_trades.py
 if ($LASTEXITCODE -ne 0) {
     Write-Host "possible_trades failed (carrying on)" -ForegroundColor Yellow
 } elseif (-not $NoPush) {
-    # Update.ps1 has already pushed the model; publish the trades page on its own.
+    # Update.ps1 has already pushed the model; the trades are now written into it - publish again.
     $env:GIT_TERMINAL_PROMPT = '0'; $env:GCM_INTERACTIVE = 'Never'
-    git add docs/trades.html verify/possible_trades.csv
+    git add docs/index.html docs/vendor verify/possible_trades.csv verify/risk_book_log.csv
     git diff --cached --quiet
     if ($LASTEXITCODE -ne 0) {
         git commit -m "possible trades $(Get-Date -Format yyyy-MM-dd)" | Out-Null
         git push
         if ($LASTEXITCODE -ne 0) { Write-Host "trades page committed locally but the push failed - run: git push" -ForegroundColor Yellow }
-        else { Write-Host "trades page published (docs/trades.html)." -ForegroundColor DarkGray }
+        else { Write-Host "trades published on the dashboard (docs/index.html, Trades tab)." -ForegroundColor DarkGray }
     }
 }
-if (Test-Path 'docs\trades.html') { Start-Process 'docs\trades.html' }
+if (Test-Path 'docs\index.html') { Start-Process 'docs\index.html' }
 
 Write-Host "`n=== saving today's live record (archive\live) ===" -ForegroundColor DarkCyan
 python archive_live.py
@@ -104,5 +112,6 @@ Write-Host "`ndone.  dashboard: docs\index.html" -ForegroundColor Green
 Write-Host "       deltas:    outage_delta.csv"
 Write-Host "       checklist: Checklist_Deviations_AB.xlsx"
 Write-Host "       week signal: verify\week_signal.csv"
-Write-Host "       trades:    docs\trades.html  (log: verify\possible_trades.csv)"
+Write-Host "       trades:    docs\index.html -> Trades tab  (log: verify\possible_trades.csv)"
+Write-Host "       odds:      docs\index.html -> Probabilities tab  (log: verify\risk_book_log.csv)"
 Write-Host "       risk:      $mp\risk_nextday.html"

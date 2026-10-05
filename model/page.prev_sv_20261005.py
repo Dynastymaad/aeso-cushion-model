@@ -98,61 +98,6 @@ def _feeds(folder):
     else: x['imp']=np.nan; x['exp']=np.nan
     return x
 
-SV_MODELS={'wind':['ecmwf-eps','gfs-ens-mem'],'solar':['ecmwf-eps','gfs-ens-mem','cmc-ens']}
-def _sv_override(root, f, comp, say):
-    """Days 2-14 wind and solar from StormVista - the SAME source the backtest used
-    (cache/stormvista, pulled each morning by pull_stormvista.py).
-      wind   ECMWF-EPS ensemble mean, GFS-ENS where ECMWF stops
-      solar  average of ECMWF-EPS, GFS-ENS and CMC-ENS
-    Each model and lead is corrected by its own average miss on settled days over
-    the last 60 days (daily means vs the composition actuals). Backtest Oct 2024 -
-    Oct 2026: daily wind error 326 MW (day 2) to 719 MW (day 13); day-ahead stays
-    on AESO (201 MW vs 311 MW for StormVista on day 1)."""
-    sv=Path(root)/'cache'/'stormvista'; today=pd.Timestamp.now().normalize()
-    D=pd.read_csv(sv/'sv_daily.csv',parse_dates=['run_date','day'])
-    act={'wind':comp['wind'].resample('D').agg(['mean','size']),'solar':comp['solar'].resample('D').agg(['mean','size'])}
-    fut=f.price.isna()&(f.ld>=2)
-    if 'wind_aeso' not in f: f['wind_aeso']=f['wind'].astype(float)
-    if 'solar_aeso' not in f: f['solar_aeso']=f['solar'].astype(float)
-    n_used={}
-    for prod,models in SV_MODELS.items():
-        a=act[prod]; a=a[a['size']>=23]['mean']
-        series=[]
-        for m in models:
-            runs=sorted((sv/m).glob(f'aeso_{prod}_*_00z.csv'))
-            runs=[r for r in runs if pd.Timestamp(r.name.split('_')[2])<=today]
-            if not runs: continue
-            r=runs[-1]; rd=pd.Timestamp(r.name.split('_')[2])
-            if rd<today-pd.Timedelta(days=2): continue
-            run=rd.tz_localize('UTC'); d=pd.read_csv(r); k=[int(c) for c in d.columns[1:]]
-            t=(run+pd.to_timedelta(k,unit='h')).tz_convert('America/Edmonton').tz_localize(None)
-            vals=d.iloc[:,1:].astype(float)
-            s=pd.Series(vals.mean(axis=0).values,index=t); keep=~s.index.duplicated(keep='first'); s=s[keep]
-            if prod=='wind' and m=='ecmwf-eps':
-                q10=pd.Series(vals.quantile(0.10,axis=0).values,index=t)[keep]; q90=pd.Series(vals.quantile(0.90,axis=0).values,index=t)[keep]
-            h=D[(D.model==m)&(D['prod']==prod)&(D.day<today)&(D.day>=today-pd.Timedelta(days=60))].copy()
-            h['act']=h.day.map(a); h=h.dropna(subset=['act'])
-            bias=(h['mean']-h.act).groupby(h.L).agg(['mean','size']); bias=bias[bias['size']>=20]['mean']
-            L=pd.Series((s.index.normalize()-rd).days,index=s.index)
-            b=L.map(bias).fillna(0.0)
-            series.append((s-b).clip(lower=0))
-            if prod=='wind' and m=='ecmwf-eps':
-                f['sv_p10']=(q10-b).clip(lower=0).reindex(f.index); f['sv_p90']=(q90-b).clip(lower=0).reindex(f.index)
-            n_used[f'{prod}:{m}']=(str(rd.date()),len(bias))
-        if not series: raise RuntimeError(f'no StormVista {prod} run from the last 2 days')
-        if prod=='wind':
-            v=series[0]
-            for extra in series[1:]: v=v.combine_first(extra)
-        else:
-            v=pd.concat(series,axis=1).mean(axis=1)
-        idx=f.index[fut & f.index.isin(v.index)]
-        f[prod]=f[prod].astype(float); f.loc[idx,prod]=v.reindex(idx).values
-        f.loc[idx,'svsrc_'+prod]=1
-    nw=int(f.get('svsrc_wind',pd.Series(0,index=f.index)).fillna(0).sum()); ns=int(f.get('svsrc_solar',pd.Series(0,index=f.index)).fillna(0).sum())
-    say(f"StormVista days 2-14: wind on {nw} hours, solar on {ns} hours (runs {', '.join(f'{k} {v[0]}' for k,v in n_used.items())}; corrections for {min(v[1] for v in n_used.values())}+ leads)")
-    if nw < int(fut.sum())*0.9: say(f"WARNING StormVista wind covers only {nw} of {int(fut.sum())} day 2-14 hours - the rest stay on the AESO feed / wind-speed extension")
-    return f
-
 def frame(root, folder, comp, say):
     """The forward feeds, with the intertie rule applied and the cushion built.
 
@@ -172,10 +117,6 @@ def frame(root, folder, comp, say):
     # four gas types. Settled hours are never touched.
     cal=_leadcal(root); hc=cal.get('thermal_haircut',{})
     f['ld']=[lead_of(t) for t in f.index]
-    try:
-        f=_sv_override(root,f,comp,say)
-    except Exception as e:
-        say(f"WARNING StormVista wind/solar unavailable ({type(e).__name__}: {e}) - days 2-14 stay on the AESO feed + wind-speed extension, which is NOT what the backtest used")
     # Forward thermal = AESO's 24-month supply outlook, corrected (cache/fwd_thermal.csv,
     # built each morning by pull_daily_inputs.py). The outlook overstates supply by
     # ~240 MW tomorrow rising to ~1,000 MW at day 13; each lead is corrected by its
@@ -438,18 +379,8 @@ def build(root, folder, d, scored, grid, tr7, comp, load_cor, gates, say, f=None
         likeday=_ld.build(root, loads_by_day=lbd, say=say)
     except Exception as e:
         say(f"  like-day panel skipped - {type(e).__name__}: {e}")
-    # Day-read cards (model/cards.py). Guarded like the like-day panel: if
-    # anything in it fails the cards hide and the rest of the page is untouched.
-    cards=None
-    try:
-        import importlib.util as _iu
-        _sp=_iu.spec_from_file_location('cards', Path(root)/'model'/'cards.py')
-        _cm=_iu.module_from_spec(_sp); _sp.loader.exec_module(_cm)
-        cards=_cm.build(root, f, comp, grid, say)
-    except Exception as e:
-        say(f"  WARNING day cards skipped - {type(e).__name__}: {e}")
     payload={'hours':hours,'grid':grid,'itbands':itb,'meta':meta,'fwd':fwd,'bands':bands,
-             'norm':norm,'analog':analog,'itp10':itp10,'likeday':likeday,'cards':cards}
+             'norm':norm,'analog':analog,'itp10':itp10,'likeday':likeday}
     tpl=(root/'model'/'template.html').read_text(encoding='utf-8')
     out=root/'docs'/'index.html'; out.parent.mkdir(exist_ok=True)
     out.write_text(tpl.replace('__DATA__',json.dumps(payload,separators=(',',':'))),encoding='utf-8')

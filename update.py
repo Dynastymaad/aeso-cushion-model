@@ -864,6 +864,13 @@ def make_grid(d, CAL, HOT, hotratio, gates=None, seed=71):
     XS,YS=knots(tr7.cush.values,tr7.price.values)
     bins=np.clip(np.digitize(hist.cush.values,E)-1,0,NB-1)
     POOL=build_pools(bins,hist.g.values,hist.r7.values)
+    try:   # inputs for risk_engine.py (Probabilities tab): curve, residual history, level factors
+        _lv=(gates or {}).get('lvl') or []
+        np.savez_compressed(ROOT/'model'/'risk_price.npz', XS=XS, YS=YS,
+            t=hist.index.values.astype('datetime64[ns]').astype('int64'), cush=hist.cush.values.astype(float),
+            g=hist.g.values.astype(int), r7=hist.r7.values.astype(float),
+            lv=np.array([[x['lo'],x['hi'],x['k']] for x in _lv],float).reshape(-1,3))
+    except Exception as _e: say(f"risk_price.npz not written ({_e})")
     HX=np.array([p[0] for p in hotratio]); HY=np.array([p[1] for p in hotratio])
     pdays=int((hist.index.max()-hist.index.min()).days)
     say(f"curve {tr7.index.min():%Y-%m-%d} to {tr7.index.max():%Y-%m-%d} "

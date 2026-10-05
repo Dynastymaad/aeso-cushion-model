@@ -116,22 +116,6 @@ table.tvt{min-width:760px;font-size:13px}
 .tvx{padding:1px 6px!important;font-size:11px} .tvqbar .btn{width:auto;flex:0 0 auto;display:inline-block;padding:5px 12px}
 .qin{display:flex;gap:6px;align-items:center;margin-top:8px;font-size:12px;color:var(--ink-2);flex-wrap:wrap}
 .qin .qi{width:72px} .qhint{color:var(--ink-3)}
-body:not(.probmode) #probView{display:none}
-body.probmode main{display:none}
-#probView{max-width:1560px;margin:0 auto;padding:20px 20px 56px}
-table.pvt{min-width:1100px} table.pvr{min-width:760px}
-.pvt tr[data-pd]{cursor:pointer} .pvt tr.sel td{background:var(--surface-2)}
-.pbcell{min-width:170px}
-.pbar{position:relative;height:12px;border-radius:6px;background:var(--surface-3);min-width:160px}
-.pb-r{position:absolute;top:2px;height:8px;border-radius:4px;background:var(--s-base);opacity:.55}
-.pb-m{position:absolute;top:0;width:2px;height:12px;background:var(--ink)}
-.pb-f{position:absolute;top:-2px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid var(--accent);margin-left:-5px}
-.pvbox{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0 4px}
-@media (max-width:700px){ .pvbox{grid-template-columns:repeat(2,minmax(0,1fr))} }
-.pvbox div{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--surface-2)}
-.pvbox small{color:var(--ink-3);font-size:11px} .pvbox b{font-size:18px;font-variant-numeric:tabular-nums} .pvbox b.up{color:var(--tight)}
-#pvDay select{min-width:150px;padding:3px 6px;border:1px solid var(--line-2);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit}
-.pvt td.dim{color:var(--ink-3)}
 .dc{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;padding:14px 16px 4px}
 .dc .fc.warn{border-color:var(--watch);background:var(--watch-bg)}
 .dc .fc.sell{border-color:var(--ok);background:var(--ok-bg)}
@@ -320,7 +304,6 @@ svg{display:block;width:100%;height:auto}
       <button class="vtab" data-view="fund" type="button">Fundamentals first</button>
       <button class="vtab" data-view="read" type="button">Full read</button>
       <button class="vtab" data-view="trades" type="button">Trades</button>
-      <button class="vtab" data-view="prob" type="button">Probabilities</button>
       <span class="vhint" id="vhint"></span>
     </div>
     <div class="daybar" id="daybar" role="group" aria-label="Select day"></div>
@@ -331,13 +314,6 @@ svg{display:block;width:100%;height:auto}
   <div class="panel">
     <div class="phead"><h2>Trades - the contracts you can trade, checked against the model</h2><span class="sub" id="tvSub"></span></div>
     <div id="tradesBody"></div>
-  </div>
-</section>
-
-<section id="probView" aria-label="Probabilities">
-  <div class="panel">
-    <div class="phead"><h2>Probabilities - where each day should settle, and which risk drives it</h2><span class="sub" id="pvSub"></span></div>
-    <div id="probBody"></div>
   </div>
 </section>
 
@@ -595,171 +571,6 @@ svg{display:block;width:100%;height:auto}
 <script>
 const D = __DATA__;
 const T = null;
-const P = null;
-// ---- Probabilities tab --------------------------------------------------------
-// P is written by risk_engine.py each morning (null until then). Everything below
-// re-prices in the browser from P and the model's own next-day price curve (D.grid, L=0).
-const RISKS=[['wind','Wind'],['load','Load'],['thermal','Thermal availability'],['imports','Imports'],['solar','Solar']];
-const RSEL={};          // per day: {risk: 0 base | 1 bad | 2 good, extra MW}, kept for this session
-let G0=null;
-function g0(){ if(G0) return G0; G0={}; (D.grid||[]).filter(r=>(r.L||0)===0).forEach(r=>{(G0[r.g]=G0[r.g]||[]).push(r);});
-  for(const k in G0) G0[k].sort((a,b)=>a.c-b.c); return G0; }
-const tgrp=he=>he<=6?0:he<=10?1:he<=16?2:he<=21?3:4;
-function px0(c,he){ const a=g0()[tgrp(he)]; if(!a||!a.length) return null;
-  if(c<=a[0].c) return a[0].mean; if(c>=a[a.length-1].c) return a[a.length-1].mean;
-  let i=1; while(a[i].c<c) i++; const l=a[i-1],u=a[i]; return l.mean+(u.mean-l.mean)*(c-l.c)/(u.c-l.c); }
-function dayFV(cush,he){ let s=0; for(let h=0;h<cush.length;h++) s+=px0(cush[h],he[h]); return s/cush.length; }
-// chance a short wins: P(average settle over the days < price - 2.50), through the engine's own track record
-function pwinRaw(days,px){
-  const Qs=days.map(d=>P&&P.days[d]?P.days[d].q:null); if(Qs.some(q=>!q)||px==null) return null;
-  const n=Qs[0].length, thr=px-(T&&T.fill!=null?T.fill:2.5);
-  let c=0; for(let i=0;i<n;i++){ let s=0; Qs.forEach(q=>s+=q[i]); if(s/Qs.length<thr) c++; }
-  const como=c/n; if(Qs.length===1) return como;
-  let k=0; const M=3000; for(let j=0;j<M;j++){ let s=0; Qs.forEach(q=>s+=q[(Math.random()*n)|0]); if(s/Qs.length<thr) k++; }
-  return 0.5*(como+k/M);
-}
-function pcal(raw){ if(raw==null||!P||!P.pw_x) return null; const x=P.pw_x,y=P.pw_y;
-  if(raw<=x[0]) return y[0]; if(raw>=x[x.length-1]) return y[y.length-1]; let i=1; while(x[i]<raw) i++;
-  return y[i-1]+(y[i]-y[i-1])*(raw-x[i-1])/(x[i]-x[i-1]); }
-const pct=v=>v==null?'—':Math.round(100*v)+'%';
-function rangeBar(r,fw,hi){   // P10-P90 bar with P50 and the forward, one scale for every day
-  const lo=0, X=v=>Math.max(0,Math.min(100,100*(v-lo)/(hi-lo)));
-  return `<div class="pbar" title="P10 ${$$(r.p10)} · P50 ${$$(r.p50)} · P90 ${$$(r.p90)}${fw!=null?' · forward '+$$(fw):''}"><span class="pb-r" style="left:${X(r.p10)}%;width:${Math.max(X(r.p90)-X(r.p10),1)}%"></span><span class="pb-m" style="left:${X(r.p50)}%"></span>${fw!=null?`<span class="pb-f" style="left:${X(fw)}%"></span>`:''}</div>`;
-}
-function renderProb(){
-  const host=$('probBody'); if(!host) return;
-  if(!P||!P.days){ $('pvSub').textContent=''; host.innerHTML=`<p class="tvp" style="padding:16px">The probabilities are added by <b>risk_engine.py</b> after the model rebuilds - Daily.ps1 runs it. Run it and reopen this page.</p>`; return; }
-  Q=qLoad();
-  $('pvSub').textContent=`built ${P.built} · wind members: StormVista ECMWF run ${P.members_run||'none'} · rolling corrections from ${P.ncal.toLocaleString()} settled reads`;
-  const days=Object.keys(P.days).sort();
-  const scl=Math.max(30,Math.min(350,1.05*Math.max(...days.map(d=>Math.max(P.days[d].p90,P.days[d].fwd||0)))));
-  const rows=days.map(d=>{const r=P.days[d], q=qGet('D:'+d), bid=q&&q.bid!=null?q.bid:null;
-    const pb=bid!=null?pcal(pwinRaw([d],bid)):null, sw=r.swings[r.main];
-    return `<tr data-pd="${d}" class="${d===day?'sel':''}"><td class="l"><b>${fmtDay(d)}</b> <span class="tvtag">d${r.lead}</span></td>
-      <td class="l pbcell">${rangeBar(r,r.fwd,scl)}</td><td>${$$(r.p10)}</td><td><b>${$$(r.p50)}</b></td><td>${$$(r.p90)}</td>
-      <td class="dim">${$$(r.pg10)} / ${$$(r.pg90)}</td><td>${$$(r.ev_page)}</td><td><b>${$$(r.fv_corr)}</b></td><td>${$$(r.fwd)}</td>
-      <td>${pct(r.pwin)}${bid!=null?`<div class="tvtag">at bid ${$$(bid)}: <b>${pct(pb)}</b></div>`:''}</td>
-      <td class="l">${escH(r.main)} <span class="tvtag">${$$(sw.fv_good)}–${$$(sw.fv_bad)}</span></td></tr>`;}).join('');
-  host.innerHTML=`<div class="tvq"><table class="tvt pvt"><thead><tr><th class="l">Day</th><th class="l">Range P10–P90 · <span style="text-transform:none">| P50 ▼ forward</span></th><th>P10</th><th>P50</th><th>P90</th>
-     <th>Avg hourly P10 / P90</th><th>FV page</th><th>FV corrected</th><th>Last settle</th><th>Chance a short wins</th><th class="l">Main risk (good–bad day)</th></tr></thead><tbody>${rows}</tbody></table>
-     <div class="tvqbar"><span class="tvbt">Range = where the day's average price should land 8 times in 10 (backtest: 12.6% below P10, 10.0% above P90). "Avg hourly" is the old way (3.5% / 14.7%). FV corrected = the page's fair value mapped through what actually settled over the last year. Short wins = chance the day settles below the price less $2.50, mapped through its own track record. Click a day for its risks.</span>
-     <button class="btn" type="button" id="pvXlsx">Export to Excel (Risk_Book.xlsx)</button></div></div>
-     <div id="pvDay"></div>`;
-  renderProbDay();
-}
-function renderProbDay(){
-  const host=$('pvDay'); if(!host||!P) return;
-  const r=P.days[day];
-  if(!r){ host.innerHTML=`<p class="tvp" style="padding:0 16px 16px">Pick a forecast day (tomorrow onward) in the day bar or the table above.</p>`; return; }
-  const S=RSEL[day]=RSEL[day]||{}, he=r.he;
-  const rows=RISKS.map(([k,lab])=>{const s=r.swings[k], v=S[k]||{sel:0,mw:''};
-    return `<tr><td class="l"><b>${lab}</b>${k===r.main?' <span class="tvpill watch">main risk</span>':''}<div class="tvtag">${escH(s.src)}</div></td>
-      <td>${sg(s.bad_mw).replace('.00','')} MW</td><td><b>${$$(s.fv_bad)}</b></td><td>${sg(s.good_mw).replace('.00','')} MW</td><td><b>${$$(s.fv_good)}</b></td>
-      <td><select data-rk="${k}" data-f="sel"><option value="0"${v.sel==0?' selected':''}>as forecast</option><option value="1"${v.sel==1?' selected':''}>bad day (10%)</option><option value="2"${v.sel==2?' selected':''}>good day (90%)</option></select></td>
-      <td><input class="qi" inputmode="decimal" data-rk="${k}" data-f="mw" value="${v.mw}" placeholder="+/- MW"></td></tr>`;}).join('');
-  const e=r.event, ev=S.event||0;
-  const erow=e?`<tr><td class="l"><b>Named event</b><div class="tvtag">${escH(e.label)} · outage report ${e.out_before.toLocaleString()} → ${e.out_day.toLocaleString()} MW out</div></td>
-      <td>−${e.mw.toLocaleString()} MW</td><td><b>${$$(e.fv)}</b></td><td colspan="2" class="l tvtag">a thermal miss this size happened on ${pct(e.base_rate)} of past days at this lead (all causes)</td>
-      <td><select data-rk="event" data-f="sel"><option value="0"${ev==0?' selected':''}>returns on time</option><option value="1"${ev==1?' selected':''}>stays out</option></select></td><td></td></tr>`:'';
-  host.innerHTML=`<div class="tvlog"><h3>${fmtDay(day)} - each risk on its own</h3>
-    <p class="tvp tvbt">Bad / good day = that risk at its own 10% / 90% outcome with everything else as forecast, priced off the next-day price curve. Switch risks on to combine them, or type a MW shift (+ = more cushion).</p>
-    <div class="tvq"><table class="tvt pvr"><thead><tr><th class="l">Risk</th><th>Bad day</th><th>FV</th><th>Good day</th><th>FV</th><th>Use</th><th>Extra MW</th></tr></thead><tbody>${rows}${erow}</tbody></table></div>
-    <div class="pvres" id="pvRes"></div></div>`;
-  probWhatIf();
-}
-function scenCush(r,S){
-  const c=r.base.slice();
-  RISKS.forEach(([k])=>{const v=S[k]; if(!v) return; const s=r.swings[k];
-    if(+v.sel===1) for(let h=0;h<24;h++) c[h]+=s.bad[h]; if(+v.sel===2) for(let h=0;h<24;h++) c[h]+=s.good[h];
-    const mw=parseFloat(v.mw); if(isFinite(mw)) for(let h=0;h<24;h++) c[h]+=mw;});
-  if(r.event&&+S.event===1) for(let h=0;h<24;h++) c[h]-=r.event.mw;
-  return c;
-}
-function probWhatIf(){
-  const r=P&&P.days[day], el=$('pvRes'); if(!r||!el) return;
-  const S=RSEL[day]||{}, c=scenCush(r,S), fv=dayFV(c,r.he), fb=r.fv_next;
-  const on=RISKS.filter(([k])=>S[k]&&(+S[k].sel||isFinite(parseFloat(S[k].mw)))).map(([,l])=>l).concat(r.event&&+S.event===1?['named event']:[]);
-  const tight=c.reduce((m,x,i)=>x<c[m]?i:m,0);
-  el.innerHTML=`<div class="pvbox"><div><small>As forecast (next-day curve)</small><b>${$$(fb)}</b></div><div><small>${on.length?'With: '+escH(on.join(', ')):'No risks switched on'}</small><b class="${fv>fb+1?'up':''}">${$$(fv)}</b></div>
-    <div><small>Change</small><b>${sg(fv-fb)}</b></div><div><small>Tightest hour</small><b>HE${r.he[tight]} · ${Math.round(c[tight]).toLocaleString()} MW</b></div></div>
-    <p class="tvp tvbt">Combined odds: the range above (P10 ${$$(r.p10)} / P50 ${$$(r.p50)} / P90 ${$$(r.p90)}) already blends every risk at once from 1,000 drawn days. Switching several bad days on at the same time is a stress test - each is a 1-in-10 outcome, so together they are much rarer.</p>`;
-}
-document.addEventListener('change',e=>{
-  const i=e.target.closest&&e.target.closest('#pvDay [data-rk]'); if(!i) return;
-  const S=RSEL[day]=RSEL[day]||{};
-  if(i.dataset.rk==='event'){ S.event=+i.value; } else { S[i.dataset.rk]=S[i.dataset.rk]||{sel:0,mw:''}; S[i.dataset.rk][i.dataset.f]=i.value; }
-  probWhatIf();
-});
-document.addEventListener('input',e=>{ const i=e.target.closest&&e.target.closest('#pvDay input[data-rk]'); if(!i) return;
-  const S=RSEL[day]=RSEL[day]||{}; S[i.dataset.rk]=S[i.dataset.rk]||{sel:0,mw:''}; S[i.dataset.rk].mw=i.value; probWhatIf(); });
-document.addEventListener('click',e=>{
-  const tr=e.target.closest&&e.target.closest('tr[data-pd]');
-  if(tr){ day=tr.dataset.pd; document.querySelectorAll('[data-day]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.day===day)));
-    document.querySelectorAll('tr[data-pd]').forEach(x=>x.classList.toggle('sel',x.dataset.pd===day)); renderProbDay(); return; }
-  if(e.target.id==='pvXlsx') exportXlsx();
-});
-// one line of the engine on the day cards (card 6)
-function addProb(cards,d){
-  const r=P&&P.days&&P.days[d]; if(!r) return cards;
-  const q=qGet('D:'+d), bid=q&&q.bid!=null?q.bid:null, pb=bid!=null?pcal(pwinRaw([d],bid)):null;
-  return cards.map(k=>k.t.startsWith('6')?{...k,rows:[...k.rows,
-    ['Risk engine range (P10 / P50 / P90)',`${$$(r.p10)} / ${$$(r.p50)} / ${$$(r.p90)}`],
-    ['FV corrected (what similar days settled)',$$(r.fv_corr)],
-    ['Chance a short wins'+(bid!=null?' at your bid':' at settle'),pct(bid!=null?pb:r.pwin)],
-    ['Main risk',`${r.main} (${$$(r.swings[r.main].fv_good)}–${$$(r.swings[r.main].fv_bad)})`]]}:k);
-}
-// ---- Excel export: one file, Risk_Book.xlsx, overwritten each time ----------------
-function loadXLSX(){   // the Excel writer ships beside the page (docs/vendor); the CDN is only a fallback
-  const one=src=>new Promise((ok,no)=>{const s=document.createElement('script'); s.src=src; s.onload=()=>window.XLSX?ok(window.XLSX):no(); s.onerror=()=>no(); document.head.appendChild(s);});
-  if(window.XLSX) return Promise.resolve(window.XLSX);
-  return one('vendor/xlsx.mini.min.js').catch(()=>one('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.mini.min.js')).catch(()=>{throw new Error('could not load the Excel writer (docs/vendor/xlsx.mini.min.js missing and no internet)');}); }
-async function exportXlsx(){
-  const msg=t=>{const el=document.querySelector('#probBody .tvqbar .tvbt'); if(el) el.textContent=t;};
-  try{
-    const X=await loadXLSX(); const wb=X.utils.book_new(); const days=Object.keys(P.days).sort();
-    // Summary
-    const S=[['Alberta risk book',`built ${P.built}`],[],['Day','Lead','P10','P50','P90','Avg hourly P10','Avg hourly P90','FV page','FV corrected','Last settle','Chance a short wins','Main risk',...RISKS.flatMap(([,l])=>[l+' bad FV',l+' good FV']),'Named event','Event FV']];
-    days.forEach(d=>{const r=P.days[d]; S.push([d,r.lead,r.p10,r.p50,r.p90,r.pg10,r.pg90,r.ev_page,r.fv_corr,r.fwd,r.pwin,r.main,...RISKS.flatMap(([k])=>[r.swings[k].fv_bad,r.swings[k].fv_good]),r.event?r.event.label:'',r.event?r.event.fv:'']);});
-    const ws1=X.utils.aoa_to_sheet(S); ws1['!cols']=[{wch:12},{wch:6}]; X.utils.book_append_sheet(wb,ws1,'Summary');
-    // Curve: next-day expected price by cushion and time block
-    const g=g0(), cs=g[0].map(x=>x.c), C=[['Cushion MW','HE1-6','HE7-10','HE11-16','HE17-21','HE22-24']];
-    cs.forEach((c,i)=>C.push([c,...[0,1,2,3,4].map(k=>g[k][i]?g[k][i].mean:null)]));
-    X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet(C),'Curve');
-    const n=cs.length+1;   // last data row on Curve
-    // What-if for the selected day (or the first forecast day)
-    const dd=P.days[day]?day:days[0], r=P.days[dd], Sx=RSEL[dd]||{};
-    const W=[[`What-if for ${dd} (d${r.lead}). Blue cells are yours: Use 0 = as forecast, 1 = bad day (10%), 2 = good day (90%); Extra MW + = more cushion.`],[],['Risk','Use','Extra MW','Bad day FV (alone)','Good day FV (alone)']];
-    RISKS.forEach(([k,l])=>{const v=Sx[k]||{}; W.push([l,+v.sel||0,isFinite(parseFloat(v.mw))?parseFloat(v.mw):0,r.swings[k].fv_bad,r.swings[k].fv_good]);});
-    W.push(['Named event (1 = stays out)',r.event?(+Sx.event||0):0,r.event?-r.event.mw:0,r.event?r.event.fv:'',r.event?r.event.label:'none']);
-    W.push([]); const H0=W.length+1;   // header row number (1-based) of the hourly table
-    W.push(['HE','Block','Base cushion',...RISKS.flatMap(([,l])=>[l+' bad',l+' good']),'Cushion used','Lookup row','Price $/MWh']);
-    for(let h=0;h<24;h++){ const row=H0+1+h, sw=RISKS.flatMap(([k])=>[r.swings[k].bad[h],r.swings[k].good[h]]);
-      // risk rows are 4..8 (Use in B, Extra in C), event row 9
-      const adj=RISKS.map(([k],i)=>{const br=4+i, col=X.utils.encode_col(3+2*i); return `CHOOSE($B$${br}+1,0,${col}${row},${X.utils.encode_col(4+2*i)}${row})+$C$${br}`;}).join('+');
-      const cu=X.utils.encode_col(3+2*RISKS.length), lk=X.utils.encode_col(4+2*RISKS.length);
-      W.push([r.he[h],tgrp(r.he[h]),r.base[h],...sw,{f:`MAX(MIN(C${row}+${adj}+IF($B$9=1,$C$9,0),Curve!$A$${n}),Curve!$A$2)`},
-        {f:`MIN(MATCH(${cu}${row},Curve!$A$2:$A$${n},1),${n-2})`},
-        {f:`INDEX(Curve!$B$2:$F$${n},${lk}${row},B${row}+1)+(INDEX(Curve!$B$2:$F$${n},${lk}${row}+1,B${row}+1)-INDEX(Curve!$B$2:$F$${n},${lk}${row},B${row}+1))*(${cu}${row}-INDEX(Curve!$A$2:$A$${n},${lk}${row}))/(INDEX(Curve!$A$2:$A$${n},${lk}${row}+1)-INDEX(Curve!$A$2:$A$${n},${lk}${row}))`}]);
-    }
-    const pc=X.utils.encode_col(5+2*RISKS.length);
-    W.push([]); W.push(['Day fair value (next-day curve)','','','','',{f:`AVERAGE(${pc}${H0+1}:${pc}${H0+24})`}]);
-    W.push(['Engine range (all risks blended): P10 / P50 / P90','','','','',r.p10,r.p50,r.p90]);
-    const ws=X.utils.aoa_to_sheet(W);
-    for(let i=4;i<=9;i++){ ['B','C'].forEach(c=>{const a=c+i; if(ws[a]) ws[a].s={font:{color:{rgb:'0000FF'}}};}); }
-    X.utils.book_append_sheet(wb,ws,'WhatIf');
-    wb.Workbook={CalcPr:{fullCalcOnLoad:true}};
-    const buf=X.write(wb,{type:'array',bookType:'xlsx'});
-    // into the linked folder (same link as the trade log), else a download
-    let saved=false;
-    if(typeof window.showDirectoryPicker==='function'){
-      try{ let h=await idbGet('dir'); if(!h){ h=await window.showDirectoryPicker({mode:'readwrite',id:'ab-verify'}); await idbPut('dir',h); }
-        let perm=h.queryPermission?await h.queryPermission({mode:'readwrite'}):'granted'; if(perm!=='granted'&&h.requestPermission) perm=await h.requestPermission({mode:'readwrite'});
-        if(perm==='granted'){ const fh=await h.getFileHandle('Risk_Book.xlsx',{create:true}); const w=await fh.createWritable(); await w.write(buf); await w.close(); saved=true; msg(`Saved Risk_Book.xlsx in ${h.name} (overwrites the last one).`); } }catch(err){}
-    }
-    if(!saved){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})); a.download='Risk_Book.xlsx'; document.body.appendChild(a); a.click(); a.remove(); msg('Downloaded Risk_Book.xlsx.'); }
-  }catch(err){ msg('Excel export failed: '+(err.message||err)); }
-}
-
 // ---- Trades tab + broker quotes -------------------------------------------
 // T is written by possible_trades.py after the model rebuilds (null until then).
 // Quotes you type live only in this browser, for today; they never leave it.
@@ -853,8 +664,6 @@ function tCardOut(p){
       +` · stress loss at −$${T.stress}/MWh: ${fmtUSD(mw*p.hours*T.stress)} · ${escH(p.worst)}`;
   }
   h+=`<p class="tvp">${size}</p>`;
-  { const used=(r.offerRun||r).px, ep=(P&&P.days&&!p.info&&!p.never)?pcal(pwinRaw(p.days,used)):null; r.ep=ep;
-    if(ep!=null) h+=`<p class="tvp">Risk engine: chance this short wins at ${$$(used)} is <b>${pct(ep)}</b>${p.sized?` · engine sizing (logged alongside, not used yet): <b>${ep>=0.9?p.size[1]:p.size[0]} MW</b>`:''}.</p>`; }
   if(r.why) h+=`<p class="tvp tvwhy">${escH(r.why)}</p>`;
   if(!p.never&&!p.info&&r.need!=null){
     let w=`Sell no lower than <b>${$$(r.need)}</b> (model + $${p.bar.toFixed(0)}${!p.weekday?'':`, last week's pool ${$$(p.last7)}`}${p.floor?', $35 floor':''}).`;
@@ -959,8 +768,7 @@ function dayRequote(C,id){
 // once you link the folder (Chrome / Edge). possible_trades.py scores the file
 // every morning (settle, P&L) and the page shows the scored rows.
 const LOGK='ab_tradelog_v1';
-const LOGCOLS=['id','logged_at','type','ref','contract','product_id','key','first','last','hours','side','mw','price','bid','offer','last_settle','model','call_shown','size_suggested','note','p_win_engine','size_engine'];
-function parseCSV(t){const R=[];let row=[],f='',q=false;for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c=='"'){if(t[i+1]=='"'){f+='"';i++;}else q=false;}else f+=c;}else{if(c=='"')q=true;else if(c==','){row.push(f);f='';}else if(c=='\n'){row.push(f);R.push(row);row=[];f='';}else if(c!='\r')f+=c;}}if(f||row.length){row.push(f);R.push(row);}return R;}
+const LOGCOLS=['id','logged_at','type','ref','contract','product_id','key','first','last','hours','side','mw','price','bid','offer','last_settle','model','call_shown','size_suggested','note'];
 function lLoad(){ try{ return JSON.parse(localStorage.getItem(LOGK)||'[]'); }catch(e){ return []; } }
 function lSave(L){ try{ localStorage.setItem(LOGK,JSON.stringify(L)); }catch(e){} }
 const csvCell=x=>{const s=String(x??''); return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;};
@@ -993,8 +801,6 @@ async function fsSync(ask){   // append every entry not yet in the file
   try{
     const dir=await fsDir(ask); if(!dir) return {ok:false,msg:'Log folder not linked - click "Link log folder" and pick the aeso-cushion model folder.'};
     const fh=await dir.getFileHandle('trade_log.csv',{create:true}); let txt=await (await fh.getFile()).text();
-    if(txt.trim()&&txt.split('\n')[0].trim()!==LOGCOLS.join(',')){ const R=parseCSV(txt), hd=R[0];
-      txt=LOGCOLS.join(',')+'\n'+R.slice(1).filter(x=>x.length>1).map(x=>{const o={}; hd.forEach((k,i)=>o[k]=x[i]); return csvRow(o);}).join('\n')+'\n'; }
     const L=lLoad(), todo=L.filter(x=>!txt.includes(x.id));
     if(!todo.length) return {ok:true,msg:`verify\\trade_log.csv is up to date (${dir.name}).`};
     if(!txt.trim()) txt=LOGCOLS.join(',')+'\n'; else if(!txt.endsWith('\n')) txt+='\n';
@@ -1047,9 +853,7 @@ document.addEventListener('click',async e=>{
     if(!(mw>0)||!isFinite(px)){ alertBox(f,'Enter MW and a price.'); return; }
     const r=tEval(p), q=r.q||{};
     await lCommit([{id:newId(),logged_at:stamp(),type:'trade',ref:'',contract:p.name,product_id:p.id,key:p.key,first:p.days[0],last:p.days[p.days.length-1],
-      hours:p.hours,side:v('side'),mw,price:px,bid:q.bid??'',offer:q.offer??'',last_settle:p.fwd??'',model:p.model??'',call_shown:r.call,size_suggested:(r.offerRun||r).mw,note:v('note'),
-      p_win_engine:(()=>{const e=(P&&P.days&&!p.info&&!p.never)?pcal(pwinRaw(p.days,px)):null; return e==null?'':e.toFixed(3);})(),
-      size_engine:(()=>{const e=(P&&P.days&&p.sized)?pcal(pwinRaw(p.days,px)):null; return e==null?'':(e>=0.9?p.size[1]:p.size[0]);})()}]);
+      hours:p.hours,side:v('side'),mw,price:px,bid:q.bid??'',offer:q.offer??'',last_settle:p.fwd??'',model:p.model??'',call_shown:r.call,size_suggested:(r.offerRun||r).mw,note:v('note')}]);
     return; }
   const vd=t.closest('[data-void]');
   if(vd){ if(!window.confirm('Mark this logged trade as a mistake? It stays in the file with a "void" row and drops out of the totals.')) return;
@@ -1582,7 +1386,7 @@ function drawCards(){
   const host=$('dayCards'), head=$('dcHead'); if(!host) return;
   const C=(D.cards||{})[day];
   if(!C){ head.textContent=D.cards?'Day read: not shown for settled days.':'Day read unavailable today - see the refresh log.'; host.innerHTML=''; return; }
-  Q=qLoad(); const qid='D:'+day, qq=Q[qid]||{}, CARDS=addProb(dayRequote(C,qid),day);
+  Q=qLoad(); const qid='D:'+day, qq=Q[qid]||{}, CARDS=dayRequote(C,qid);
   const esc=x=>String(x).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
   head.innerHTML=`<b>Day read</b> · ${fmtDay(day)} · ${C.lead<=0?'today':C.lead+' day'+(C.lead>1?'s':'')+' out'}`;
   host.innerHTML=CARDS.map(c=>{
@@ -2091,14 +1895,11 @@ $('daybar').innerHTML=days.map(d=>{
 function applyView(){
   document.body.classList.toggle('fundmode',view==='fund');
   document.body.classList.toggle('tradesmode',view==='trades');
-  document.body.classList.toggle('probmode',view==='prob');
   if(view==='trades') renderTrades();
-  if(view==='prob') renderProb();
   document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===view)));
   $('vhint').textContent = view==='fund'
     ? 'prices hidden on purpose — form your own view first'
     : view==='trades' ? 'type the broker bid / offer to re-check each idea'
-    : view==='prob' ? 'ranges and odds from 1,000 drawn days - pick a day for its risks'
     : 'everything, including the model\u2019s answer';
 }
 document.querySelector('.viewbar').addEventListener('click',e=>{
@@ -2106,7 +1907,6 @@ document.querySelector('.viewbar').addEventListener('click',e=>{
   view=b.dataset.view; applyView(); render();
 });
 applyView();
-$('daybar').addEventListener('click',e=>{ if(view==='prob'&&e.target.closest('[data-day]')) setTimeout(renderProb,0); });
 $('daybar').addEventListener('click',e=>{const b=e.target.closest('[data-day]');if(!b)return;
   day=b.dataset.day;document.querySelectorAll('[data-day]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.day===day)));render();});
 const last=D.hours.filter(h=>h.price!=null).map(h=>h.dt).sort().pop();

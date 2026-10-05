@@ -13,3 +13,6 @@ __pycache__/
 model/_*.pkl
 
 _to_delete/
+stormvista_key.txt
+verify/trade_log.csv
+verify/trade_log_scored.csv

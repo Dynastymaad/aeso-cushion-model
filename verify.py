@@ -109,7 +109,7 @@ def git_versions(limit=None):
     """(sha, committed_at, html) for every published page in history, oldest first."""
     try:
         out = subprocess.run(['git', 'log', '--format=%H %cI', '--', PAGE],
-                             cwd=HERE, capture_output=True, text=True, timeout=60)
+                             cwd=HERE, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=60)
         lines = [l for l in out.stdout.splitlines() if l.strip()]
     except Exception as e:
         say(f"  git history unavailable ({e}); using the working copy only")
@@ -121,7 +121,7 @@ def git_versions(limit=None):
         sha, iso = line.split(' ', 1)
         try:
             blob = subprocess.run(['git', 'show', f'{sha}:{PAGE}'], cwd=HERE,
-                                  capture_output=True, text=True, timeout=60).stdout
+                                  capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=60).stdout
         except Exception:
             continue
         if blob:

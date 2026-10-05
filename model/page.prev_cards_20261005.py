@@ -438,18 +438,8 @@ def build(root, folder, d, scored, grid, tr7, comp, load_cor, gates, say, f=None
         likeday=_ld.build(root, loads_by_day=lbd, say=say)
     except Exception as e:
         say(f"  like-day panel skipped - {type(e).__name__}: {e}")
-    # Day-read cards (model/cards.py). Guarded like the like-day panel: if
-    # anything in it fails the cards hide and the rest of the page is untouched.
-    cards=None
-    try:
-        import importlib.util as _iu
-        _sp=_iu.spec_from_file_location('cards', Path(root)/'model'/'cards.py')
-        _cm=_iu.module_from_spec(_sp); _sp.loader.exec_module(_cm)
-        cards=_cm.build(root, f, comp, grid, say)
-    except Exception as e:
-        say(f"  WARNING day cards skipped - {type(e).__name__}: {e}")
     payload={'hours':hours,'grid':grid,'itbands':itb,'meta':meta,'fwd':fwd,'bands':bands,
-             'norm':norm,'analog':analog,'itp10':itp10,'likeday':likeday,'cards':cards}
+             'norm':norm,'analog':analog,'itp10':itp10,'likeday':likeday}
     tpl=(root/'model'/'template.html').read_text(encoding='utf-8')
     out=root/'docs'/'index.html'; out.parent.mkdir(exist_ok=True)
     out.write_text(tpl.replace('__DATA__',json.dumps(payload,separators=(',',':'))),encoding='utf-8')
