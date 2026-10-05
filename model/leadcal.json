@@ -1,5 +1,5 @@
 {
- "note": "Forward-lead calibration for the 14-day view. m = how much wider the cushion error is at that lead than day-ahead (wind, load, thermal and intertie errors combined, measured). thermal_haircut: gencap available capability has run above what shows up, by about 100 MW more for every day further out than tomorrow (archived gencap vs composition, Sep 2026); capped.",
+ "note": "Forward-lead calibration for the 14-day view. m = how much wider the cushion error is at that lead than day-ahead (wind, load, thermal and intertie errors combined, measured). thermal_haircut: gencap available capability has run above what shows up, by about 100 MW more for every day further out than tomorrow (archived gencap vs composition, Sep 2026); capped. Days 8-14 (buckets 4-5) set to m=1.25 on 2026-10-04: backtest over 158 weeks (Aug 2025-Sep 2026) showed the measured 1.89-2.06 made the days 8-14 week read $15-18/MWh high (thermal carried forward) or $9-12 high (thermal known); 1.25 cut that to about +$6 / $0 and lowered the week miss by about $4-5. The measured value is kept as m_measured.",
  "buckets": [
   {
    "L": 0,
@@ -29,13 +29,15 @@
    "L": 4,
    "lo": 8,
    "hi": 10,
-   "m": 1.888
+   "m": 1.25,
+   "m_measured": 1.888
   },
   {
    "L": 5,
    "lo": 11,
    "hi": 14,
-   "m": 2.063
+   "m": 1.25,
+   "m_measured": 2.063
   }
  ],
  "thermal_haircut": {

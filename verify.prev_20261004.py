@@ -59,17 +59,16 @@ def tgroup(he):
 def grid_index(grid):
     G = {}
     for r in grid:
-        G.setdefault((r['g'], r.get('L', 0) or 0), []).append(r)
+        G.setdefault(r['g'], []).append(r)
     for k in G:
         G[k].sort(key=lambda r: r['c'])
     return G
 
 
-def look(G, cush, g, L=0):
+def look(G, cush, g):
     """Same linear-in-cushion lookup the page does, so the recorded numbers are
-    the numbers you were actually shown. L = the lead bucket the page used for
-    that hour (pages built since 2026-09-30 carry one grid per bucket)."""
-    a = G.get((g, L)) or G[(g, 0)]
+    the numbers you were actually shown."""
+    a = G[g]
     if cush <= a[0]['c']:
         return {k: a[0].get(k) for k in KEYS}
     if cush >= a[-1]['c']:
@@ -171,7 +170,7 @@ def score(root, limit=None, backfill=False):
         old = pd.read_csv(LOG, usecols=['vintage', 'target'])
         seen = set(zip(old.vintage, old.target))
 
-    versions = list(git_versions(limit)) if backfill else list(git_versions(20))   # the last 20 published pages, so every morning run's forecast gets scored once it settles
+    versions = list(git_versions(limit)) if backfill else []
     cur = (root / PAGE)
     if cur.exists():
         versions.append(('working', datetime.now().isoformat(timespec='seconds'),
@@ -197,8 +196,8 @@ def score(root, limit=None, backfill=False):
             g = tgroup(int(h['he']))
             cf, gas_fc, it_fc = cushion_of(h)
             ca = float(A.at[t, 'cush_a'])
-            at_fc = look(G, cf, g, h.get('lb', 0) or 0)   # what the page showed
-            at_act = look(G, ca, g, h.get('lb', 0) or 0)  # what it would have shown, inputs right
+            at_fc = look(G, cf, g)            # what the page showed
+            at_act = look(G, ca, g)           # what it would have shown, inputs right
             px = float(A.at[t, 'price'])
             r = {
                 'vintage': sha, 'published': pub.strftime('%Y-%m-%d %H:%M'),

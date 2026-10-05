@@ -22,10 +22,6 @@ Set-Location $PSScriptRoot
 $mp = Join-Path (Split-Path $PSScriptRoot -Parent) 'aeso-market-power'
 
 if (-not $SkipUpdate) {
-    Write-Host "`n=== forward thermal + daily forwards ===" -ForegroundColor DarkCyan
-    python pull_daily_inputs.py
-    if ($LASTEXITCODE -ne 0) { Write-Host "pull_daily_inputs had a failure (carrying on - the model falls back to gencap + haircut)" -ForegroundColor Yellow }
-
     Write-Host "`n=== 1/3  refreshing the cushion model ===" -ForegroundColor Cyan
     if ($NoPush) { .\Update.ps1 -NoPush -FromDaily } else { .\Update.ps1 -FromDaily }
 
@@ -64,10 +60,6 @@ Write-Host "`n=== checklist workbook ===" -ForegroundColor DarkCyan
 .\Refresh-Checklist.ps1
 if ($LASTEXITCODE -ne 0) { Write-Host "checklist rebuild failed (carrying on)" -ForegroundColor Yellow }
 
-Write-Host "`n=== days 8-13 weekly signal ===" -ForegroundColor DarkCyan
-python week_signal.py
-if ($LASTEXITCODE -ne 0) { Write-Host "week_signal failed (carrying on)" -ForegroundColor Yellow }
-
 Write-Host "`n=== 3/3  next-day withholding risk ===" -ForegroundColor Cyan
 if (Test-Path (Join-Path $mp 'risk.py')) {
     Push-Location $mp
@@ -81,5 +73,4 @@ if (Test-Path (Join-Path $mp 'risk.py')) {
 Write-Host "`ndone.  dashboard: docs\index.html" -ForegroundColor Green
 Write-Host "       deltas:    outage_delta.csv"
 Write-Host "       checklist: Checklist_Deviations_AB.xlsx"
-Write-Host "       week signal: verify\week_signal.csv"
 Write-Host "       risk:      $mp\risk_nextday.html"

@@ -117,37 +117,8 @@ def frame(root, folder, comp, say):
     # four gas types. Settled hours are never touched.
     cal=_leadcal(root); hc=cal.get('thermal_haircut',{})
     f['ld']=[lead_of(t) for t in f.index]
-    # Forward thermal from the CANPOWER snapshots (cache/fwd_thermal.csv, pulled
-    # each morning by pull_daily_inputs.py). Over May 2025-Sep 2026 that source
-    # sat within ~15-60 MW of outturn at every lead, while AESO gencap runs about
-    # 100 MW + 75 MW per day ahead too high - so on hours it covers it replaces
-    # gencap and NO haircut is applied. Hours it does not reach, or any run where
-    # the file is missing or more than 36 h old, fall back to gencap + haircut.
-    f['thsrc']='gencap'
-    try:
-        fp=Path(root)/'cache'/'fwd_thermal.csv'
-        if fp.exists():
-            T=pd.read_csv(fp,parse_dates=['datetime_begin','render_time']).set_index('datetime_begin')
-            for _c in ('render_time',):
-                if getattr(T[_c].dt,'tz',None) is not None: T[_c]=T[_c].dt.tz_convert('America/Edmonton').dt.tz_localize(None)
-            if getattr(T.index,'tz',None) is not None: T.index=T.index.tz_convert('America/Edmonton').tz_localize(None)
-            T=T[~T.index.duplicated(keep='last')]
-            age=(pd.Timestamp.now()-T.render_time.max()).total_seconds()/3600
-            if age<=36:
-                fut=f.price.isna()&f.index.isin(T.index)
-                T=T.reindex(f.index[fut])
-                good=T[['sc','cogen','cc','gfs']].notna().all(axis=1)&(T[['sc','cogen','cc','gfs']].sum(axis=1)>3000)
-                idx=good[good].index
-                for c in ('cc','sc','cogen','gfs'): f[c]=f[c].astype(float); f.loc[idx,c]=T.loc[idx,c].astype(float)
-                f.loc[idx,'thsrc']='canpower'
-                f['gas']=f[['cc','sc','cogen','gfs']].sum(axis=1)
-                say(f"forward thermal from CANPOWER snapshots on {len(idx)} forward hours (render {T.render_time.max()}, {age:.0f} h old); gencap kept for the rest")
-            else:
-                say(f"fwd_thermal.csv is {age:.0f} h old - using gencap + haircut")
-    except Exception as e:
-        say(f"forward thermal switch skipped ({type(e).__name__}: {e}) - using gencap + haircut")
     if hc.get('enabled'):
-        fut=f.price.isna()&(f.ld>=int(hc.get('from_lead',2)))&(f.thsrc=='gencap')
+        fut=f.price.isna()&(f.ld>=int(hc.get('from_lead',2)))
         cut=np.minimum(float(hc.get('cap',1000)),float(hc.get('per_day',100))*(f.ld-1)).clip(lower=0)
         for c in ('cc','sc','cogen','gfs'): f[c]=f[c].astype(float)
         g4=f[['cc','sc','cogen','gfs']].sum(axis=1).replace(0,np.nan)

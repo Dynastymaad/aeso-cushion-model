@@ -1,0 +1,2 @@
+run,block_start,block_end,model_days,page_built,model_ev,model_p50,fwd_date,fwd_days,fwd,fwd_distinct_prices,fwd_age_days,gap,signal
+2026-10-04 20:40,2026-10-12,2026-10-17,4,2026-10-02,40.35,21.5,2026-09-21,6,33.0,1,13,-7.35,STALE FORWARD

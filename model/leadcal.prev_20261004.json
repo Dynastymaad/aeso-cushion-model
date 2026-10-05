@@ -1,0 +1,60 @@
+{
+ "note": "Forward-lead calibration for the 14-day view. m = how much wider the cushion error is at that lead than day-ahead (wind, load, thermal and intertie errors combined, measured). thermal_haircut: gencap available capability has run above what shows up, by about 100 MW more for every day further out than tomorrow (archived gencap vs composition, Sep 2026); capped.",
+ "buckets": [
+  {
+   "L": 0,
+   "lo": 0,
+   "hi": 1,
+   "m": 1.0
+  },
+  {
+   "L": 1,
+   "lo": 2,
+   "hi": 3,
+   "m": 1.171
+  },
+  {
+   "L": 2,
+   "lo": 4,
+   "hi": 5,
+   "m": 1.427
+  },
+  {
+   "L": 3,
+   "lo": 6,
+   "hi": 7,
+   "m": 1.662
+  },
+  {
+   "L": 4,
+   "lo": 8,
+   "hi": 10,
+   "m": 1.888
+  },
+  {
+   "L": 5,
+   "lo": 11,
+   "hi": 14,
+   "m": 2.063
+  }
+ ],
+ "thermal_haircut": {
+  "enabled": true,
+  "per_day": 100,
+  "from_lead": 2,
+  "cap": 1000
+ },
+ "wind_beyond_feed": {
+  "shrink": {
+   "8": 0.5,
+   "9": 0.5,
+   "10": 0.25,
+   "11": 0.25,
+   "12": 0.1,
+   "13": 0.1,
+   "14": 0.1,
+   "15": 0.1
+  }
+ },
+ "max_lead": 14
+}
