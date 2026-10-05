@@ -22,9 +22,9 @@ Set-Location $PSScriptRoot
 $mp = Join-Path (Split-Path $PSScriptRoot -Parent) 'aeso-market-power'
 
 if (-not $SkipUpdate) {
-    Write-Host "`n=== forward thermal + daily forwards ===" -ForegroundColor DarkCyan
+    Write-Host "`n=== forward thermal (corrected AESO outlook) + daily forwards ===" -ForegroundColor DarkCyan
     python pull_daily_inputs.py
-    if ($LASTEXITCODE -ne 0) { Write-Host "pull_daily_inputs had a failure (carrying on - the model falls back to gencap + haircut)" -ForegroundColor Yellow }
+    if ($LASTEXITCODE -ne 0) { Write-Host "pull_daily_inputs had a FAILURE - see logs\pull_daily_inputs.log for the full error. If it was forward thermal, today's page is on the less accurate gencap + haircut fallback." -ForegroundColor Red }
 
     Write-Host "`n=== 1/3  refreshing the cushion model ===" -ForegroundColor Cyan
     if ($NoPush) { .\Update.ps1 -NoPush -FromDaily } else { .\Update.ps1 -FromDaily }
@@ -68,6 +68,28 @@ Write-Host "`n=== days 8-13 weekly signal ===" -ForegroundColor DarkCyan
 python week_signal.py
 if ($LASTEXITCODE -ne 0) { Write-Host "week_signal failed (carrying on)" -ForegroundColor Yellow }
 
+Write-Host "`n=== possible trades ===" -ForegroundColor DarkCyan
+python possible_trades.py
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "possible_trades failed (carrying on)" -ForegroundColor Yellow
+} elseif (-not $NoPush) {
+    # Update.ps1 has already pushed the model; publish the trades page on its own.
+    $env:GIT_TERMINAL_PROMPT = '0'; $env:GCM_INTERACTIVE = 'Never'
+    git add docs/trades.html verify/possible_trades.csv
+    git diff --cached --quiet
+    if ($LASTEXITCODE -ne 0) {
+        git commit -m "possible trades $(Get-Date -Format yyyy-MM-dd)" | Out-Null
+        git push
+        if ($LASTEXITCODE -ne 0) { Write-Host "trades page committed locally but the push failed - run: git push" -ForegroundColor Yellow }
+        else { Write-Host "trades page published (docs/trades.html)." -ForegroundColor DarkGray }
+    }
+}
+if (Test-Path 'docs\trades.html') { Start-Process 'docs\trades.html' }
+
+Write-Host "`n=== saving today's live record (archive\live) ===" -ForegroundColor DarkCyan
+python archive_live.py
+if ($LASTEXITCODE -ne 0) { Write-Host "archive_live failed (carrying on) - today's live record was NOT saved" -ForegroundColor Yellow }
+
 Write-Host "`n=== 3/3  next-day withholding risk ===" -ForegroundColor Cyan
 if (Test-Path (Join-Path $mp 'risk.py')) {
     Push-Location $mp
@@ -82,4 +104,5 @@ Write-Host "`ndone.  dashboard: docs\index.html" -ForegroundColor Green
 Write-Host "       deltas:    outage_delta.csv"
 Write-Host "       checklist: Checklist_Deviations_AB.xlsx"
 Write-Host "       week signal: verify\week_signal.csv"
+Write-Host "       trades:    docs\trades.html  (log: verify\possible_trades.csv)"
 Write-Host "       risk:      $mp\risk_nextday.html"

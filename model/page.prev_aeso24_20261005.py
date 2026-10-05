@@ -117,39 +117,35 @@ def frame(root, folder, comp, say):
     # four gas types. Settled hours are never touched.
     cal=_leadcal(root); hc=cal.get('thermal_haircut',{})
     f['ld']=[lead_of(t) for t in f.index]
-    # Forward thermal = AESO's 24-month supply outlook, corrected (cache/fwd_thermal.csv,
-    # built each morning by pull_daily_inputs.py). The outlook overstates supply by
-    # ~240 MW tomorrow rising to ~1,000 MW at day 13; each lead is corrected by its
-    # own miss over the last 60 days. Measured Sep 20-Oct 2 2026 over every lead:
-    # 162 MW error vs 248 MW for AESO gencap + haircut (688 MW raw). It replaces
-    # gencap on every forward hour it covers, tomorrow included, with NO haircut.
-    # (The CANPOWER fundamentals snapshots used before only reach 1-2 hours ahead.)
-    # If the file is missing, broken or more than 36 h old the page falls back to
-    # gencap + haircut and says so loudly.
+    # Forward thermal from the CANPOWER snapshots (cache/fwd_thermal.csv, pulled
+    # each morning by pull_daily_inputs.py). Over May 2025-Sep 2026 that source
+    # sat within ~15-60 MW of outturn at every lead, while AESO gencap runs about
+    # 100 MW + 75 MW per day ahead too high - so on hours it covers it replaces
+    # gencap and NO haircut is applied. Hours it does not reach, or any run where
+    # the file is missing or more than 36 h old, fall back to gencap + haircut.
     f['thsrc']='gencap'
     try:
         fp=Path(root)/'cache'/'fwd_thermal.csv'
-        if not fp.exists(): say('WARNING cache/fwd_thermal.csv missing - FALLING BACK to AESO gencap + haircut (less accurate). Check logs/pull_daily_inputs.log')
         if fp.exists():
             T=pd.read_csv(fp,parse_dates=['datetime_begin','render_time']).set_index('datetime_begin')
             for _c in ('render_time',):
                 if getattr(T[_c].dt,'tz',None) is not None: T[_c]=T[_c].dt.tz_convert('America/Edmonton').dt.tz_localize(None)
             if getattr(T.index,'tz',None) is not None: T.index=T.index.tz_convert('America/Edmonton').tz_localize(None)
             T=T[~T.index.duplicated(keep='last')]
-            _rt=T.render_time.max(); age=(pd.Timestamp.now()-_rt).total_seconds()/3600
+            age=(pd.Timestamp.now()-T.render_time.max()).total_seconds()/3600
             if age<=36:
                 fut=f.price.isna()&f.index.isin(T.index)
                 T=T.reindex(f.index[fut])
                 good=T[['sc','cogen','cc','gfs']].notna().all(axis=1)&(T[['sc','cogen','cc','gfs']].sum(axis=1)>3000)
                 idx=good[good].index
                 for c in ('cc','sc','cogen','gfs'): f[c]=f[c].astype(float); f.loc[idx,c]=T.loc[idx,c].astype(float)
-                f.loc[idx,'thsrc']='aeso24'
+                f.loc[idx,'thsrc']='canpower'
                 f['gas']=f[['cc','sc','cogen','gfs']].sum(axis=1)
-                say(f"forward thermal: corrected AESO outlook on {len(idx)} forward hours (built {_rt:%Y-%m-%d %H:%M}, {age:.0f} h old); gencap + haircut only on {int((f.price.isna()&(f.thsrc=='gencap')).sum())} hours it does not reach")
+                say(f"forward thermal from CANPOWER snapshots on {len(idx)} forward hours (render {T.render_time.max()}, {age:.0f} h old); gencap kept for the rest")
             else:
-                say(f"WARNING forward thermal is {age:.0f} h old - FALLING BACK to AESO gencap + haircut (less accurate). Check logs/pull_daily_inputs.log")
+                say(f"fwd_thermal.csv is {age:.0f} h old - using gencap + haircut")
     except Exception as e:
-        say(f"WARNING forward thermal unreadable ({type(e).__name__}: {e}) - FALLING BACK to AESO gencap + haircut (less accurate)")
+        say(f"forward thermal switch skipped ({type(e).__name__}: {e}) - using gencap + haircut")
     if hc.get('enabled'):
         fut=f.price.isna()&(f.ld>=int(hc.get('from_lead',2)))&(f.thsrc=='gencap')
         cut=np.minimum(float(hc.get('cap',1000)),float(hc.get('per_day',100))*(f.ld-1)).clip(lower=0)
