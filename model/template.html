@@ -622,6 +622,9 @@ function pcal(raw){ if(raw==null||!P||!P.pw_x) return null; const x=P.pw_x,y=P.p
   if(raw<=x[0]) return y[0]; if(raw>=x[x.length-1]) return y[y.length-1]; let i=1; while(x[i]<raw) i++;
   return y[i-1]+(y[i]-y[i-1])*(raw-x[i-1])/(x[i]-x[i-1]); }
 const pct=v=>v==null?'—':Math.round(100*v)+'%';
+function oddsCell(o){ if(!o) return '–'; const ideal={above_p10:.9,above_p25:.75,above_p50:.5,above_p75:.25,above_p90:.1};
+  const v=['above_p10','above_p25','above_p50','above_p75','above_p90'].map(k=>{const x=o[k], off=Math.abs(x-ideal[k])>0.08; return `<span${off?' style="color:#c0392b;font-weight:600"':''}>${Math.round(100*x)}</span>`;}).join(' / ');
+  return `${v}%<div class="tvtag">${o.n} days · ${escH(o.bucket)} · ${escH(o.lead)}</div>`; }
 function rangeBar(r,fw,hi){   // P10-P90 bar with P50 and the forward, one scale for every day
   const lo=0, X=v=>Math.max(0,Math.min(100,100*(v-lo)/(hi-lo)));
   return `<div class="pbar" title="P10 ${$$(r.p10)} · P50 ${$$(r.p50)} · P90 ${$$(r.p90)}${fw!=null?' · forward '+$$(fw):''}"><span class="pb-r" style="left:${X(r.p10)}%;width:${Math.max(X(r.p90)-X(r.p10),1)}%"></span><span class="pb-m" style="left:${X(r.p50)}%"></span>${fw!=null?`<span class="pb-f" style="left:${X(fw)}%"></span>`:''}</div>`;
@@ -636,13 +639,13 @@ function renderProb(){
   const rows=days.map(d=>{const r=P.days[d], q=qGet('D:'+d), bid=q&&q.bid!=null?q.bid:null;
     const pb=bid!=null?pcal(pwinRaw([d],bid)):null, sw=r.swings[r.main];
     return `<tr data-pd="${d}" class="${d===day?'sel':''}"><td class="l"><b>${fmtDay(d)}</b> <span class="tvtag">d${r.lead}</span></td>
-      <td class="l pbcell">${rangeBar(r,r.fwd,scl)}</td><td>${$$(r.p10)}</td><td class="pvfv"><b>${$$(r.p50)}</b></td><td>${$$(r.p90)}</td>
-      <td class="dim">${$$(r.pg10)} / ${$$(r.pg90)}</td><td>${$$(r.ev_page)}</td><td>${$$(r.fwd)}</td>
+      <td class="l pbcell">${rangeBar(r,r.fwd,scl)}</td><td class="pvfv"><b>${$$(r.fv??r.p50)}</b></td><td>${$$(r.p10)}</td><td>${$$(r.p25)}</td><td>${$$(r.p50)}</td><td>${$$(r.p75)}</td><td>${$$(r.p90)}</td>
+      <td>${oddsCell(r.odds)}</td><td class="dim">${$$(r.pg10)} / ${$$(r.pg90)}</td><td>${$$(r.ev_page)}</td><td>${$$(r.fwd)}</td>
       <td>${pct(r.pwin)}${bid!=null?`<div class="tvtag">at bid ${$$(bid)}: <b>${pct(pb)}</b></div>`:''}</td>
       <td class="l">${escH(r.main)} <span class="tvtag">${$$(sw.fv_good)}–${$$(sw.fv_bad)}</span></td></tr>`;}).join('');
-  host.innerHTML=`<div class="tvq"><table class="tvt pvt"><thead><tr><th class="l">Day</th><th class="l">Range P10–P90 · <span style="text-transform:none">| P50 ▼ forward</span></th><th>P10</th><th>P50 = fair value</th><th>P90</th>
-     <th>Avg hourly P10 / P90</th><th>Page EV (old)</th><th>Last settle</th><th>Chance a short wins</th><th class="l">Main risk (good–bad day)</th></tr></thead><tbody>${rows}</tbody></table>
-     <div class="tvqbar"><span class="tvbt">Range = where the day's average price should land 8 times in 10 (backtest: 11.4% below P10, 9.7% above P90). "Avg hourly" is the old way (3.5% / 14.7%). Fair value = the engine's P50 - the most accurate single number in the backtest (average miss $23 vs $28 for the corrected page value and $33 for the page's own EV). Short wins = chance the day settles below the price less $2.50, mapped through its own track record. Click a day for its risks.</span>
+  host.innerHTML=`<div class="tvq"><table class="tvt pvt"><thead><tr><th class="l">Day</th><th class="l">Range P10–P90 · <span style="text-transform:none">| P50 ▼ forward</span></th><th>Fair value (expected)</th><th>P10</th><th>P25</th><th>P50 typical day</th><th>P75</th><th>P90</th>
+     <th>Backtest: days like this settled above<br>P10 / P25 / P50 / P75 / P90</th><th>Avg hourly P10 / P90</th><th>Page EV (old)</th><th>Last settle</th><th>Chance a short wins</th><th class="l">Main risk (good–bad day)</th></tr></thead><tbody>${rows}</tbody></table>
+     <div class="tvqbar"><span class="tvbt">Range = where the day's average price should land 8 times in 10. A perfect range is beaten 90 / 75 / 50 / 25 / 10% of the time at P10 / P25 / P50 / P75 / P90; the backtest column shows how often settles actually beat each line on past days in the same lead group (1–3 or 4+ days out) and tightest-hour bucket - use those odds, not the textbook ones. Red = more than 8 points off textbook. "Avg hourly" is the old way (3.5% / 14.7%). Fair value = the expected settle, the average of this range (a forward pays on the average, not the typical day). Backtest: about $8 high on ordinary days, about $5 low on tight days. P50 = the typical day: half of days settle below it. Short wins = chance the day settles below the price less $2.50, mapped through its own track record. Click a day for its risks.</span>
      <button class="btn" type="button" id="pvXlsx">Export to Excel (Risk_Book.xlsx)</button></div></div>
      <div id="pvDay"></div>`;
   renderProbDay();
@@ -703,8 +706,9 @@ function addProb(cards,d){
   const r=P&&P.days&&P.days[d]; if(!r) return cards;
   const q=qGet('D:'+d), bid=q&&q.bid!=null?q.bid:null, pb=bid!=null?pcal(pwinRaw([d],bid)):null;
   return cards.map(k=>k.t.startsWith('6')?{...k,rows:[...k.rows,
-    ['Fair value (risk engine P50)',$$(r.p50)],
-    ['Risk engine range (P10 – P90)',`${$$(r.p10)} – ${$$(r.p90)}`],
+    ['Fair value (expected settle)',$$(r.fv??r.p50)],
+    ['Typical day (P50) · range P10 – P90',`${$$(r.p50)} · ${$$(r.p10)} – ${$$(r.p90)}`],
+    ['P25 / P75',`${$$(r.p25)} / ${$$(r.p75)}`],['Backtest: days like this settled above P10/P25/P50/P75/P90',r.odds?['above_p10','above_p25','above_p50','above_p75','above_p90'].map(k=>Math.round(100*r.odds[k])).join(' / ')+`% (${r.odds.n} days)`:'–'],
     ['Chance a short wins'+(bid!=null?' at your bid':' at settle'),pct(bid!=null?pb:r.pwin)],
     ['Main risk',`${r.main} (${$$(r.swings[r.main].fv_good)}–${$$(r.swings[r.main].fv_bad)})`]]}:k);
 }
@@ -718,8 +722,8 @@ async function exportXlsx(){
   try{
     const X=await loadXLSX(); const wb=X.utils.book_new(); const days=Object.keys(P.days).sort();
     // Summary
-    const S=[['Alberta risk book',`built ${P.built}`],[],['Day','Lead','P10','P50 = fair value','P90','Avg hourly P10','Avg hourly P90','Page EV (old)','Last settle','Chance a short wins','Main risk',...RISKS.flatMap(([,l])=>[l+' bad FV',l+' good FV']),'Named event','Event FV']];
-    days.forEach(d=>{const r=P.days[d]; S.push([d,r.lead,r.p10,r.p50,r.p90,r.pg10,r.pg90,r.ev_page,r.fwd,r.pwin,r.main,...RISKS.flatMap(([k])=>[r.swings[k].fv_bad,r.swings[k].fv_good]),r.event?r.event.label:'',r.event?r.event.fv:'']);});
+    const S=[['Alberta risk book',`built ${P.built}`],[],['Day','Lead','Fair value (expected)','P10','P25','P50 typical day','P75','P90','Backtest above P10','above P25','above P50','above P75','above P90','Backtest days','Avg hourly P10','Avg hourly P90','Page EV (old)','Last settle','Chance a short wins','Main risk',...RISKS.flatMap(([,l])=>[l+' bad FV',l+' good FV']),'Named event','Event FV']];
+    days.forEach(d=>{const r=P.days[d]; const o=r.odds||{}; S.push([d,r.lead,r.fv??r.p50,r.p10,r.p25,r.p50,r.p75,r.p90,o.above_p10,o.above_p25,o.above_p50,o.above_p75,o.above_p90,o.n,r.pg10,r.pg90,r.ev_page,r.fwd,r.pwin,r.main,...RISKS.flatMap(([k])=>[r.swings[k].fv_bad,r.swings[k].fv_good]),r.event?r.event.label:'',r.event?r.event.fv:'']);});
     const ws1=X.utils.aoa_to_sheet(S); ws1['!cols']=[{wch:12},{wch:6}]; X.utils.book_append_sheet(wb,ws1,'Summary');
     // Curve: next-day expected price by cushion and time block
     const g=g0(), cs=g[0].map(x=>x.c), C=[['Cushion MW','HE1-6','HE7-10','HE11-16','HE17-21','HE22-24']];
@@ -1181,8 +1185,11 @@ function render(){
 
   $('tiles').innerHTML=`
     <div class="tile"><span class="eyebrow">${part?`Average of ${rows.length} hrs`:'Day average'}</span>
-      <div class="big num">${usd(sAvg)}<span style="font-size:13px;color:var(--ink-3);font-weight:400"> P50</span></div>
-      <div class="big num" style="font-size:19px;margin-top:2px">${usd(sEV)}<span style="font-size:13px;color:var(--ink-3);font-weight:400"> fair value</span></div>
+      ${(P&&P.days&&P.days[day])?`<div class="big num">${usd(P.days[day].fv??P.days[day].p50)}<span style="font-size:13px;color:var(--ink-3);font-weight:400"> fair value (expected settle)</span></div>
+      <div class="foot" style="margin-top:2px">typical day (P50) ${usd(P.days[day].p50)} · range ${usd(P.days[day].p10)} – ${usd(P.days[day].p90)} (same as the Probabilities tab; does not move with the sliders)</div>
+      <div class="foot" style="margin-top:4px">hourly model: avg of hourly P50 ${usd(sAvg)} · avg of hourly EV ${usd(sEV)}</div>`
+      :`<div class="big num">${usd(sAvg)}<span style="font-size:13px;color:var(--ink-3);font-weight:400"> avg of hourly P50</span></div>
+      <div class="big num" style="font-size:19px;margin-top:2px">${usd(sEV)}<span style="font-size:13px;color:var(--ink-3);font-weight:400"> avg of hourly EV</span></div>`}
       <div class="foot">${part?`<span style="color:var(--watch)">part day — HE${Math.min(...hrs)}–${Math.max(...hrs)} only</span>`
         :(dirty?`filed ${usd(bAvg)} · <span class="delta ${dP>=0?'up':'dn'}">${dP>=0?'+':'−'}${usd(Math.abs(dP)).replace('$','$')}</span>`:'no shocks applied')}</div></div>
     <div class="tile"><span class="eyebrow">Riskiest hour</span>

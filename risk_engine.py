@@ -15,7 +15,7 @@ Then two rolling corrections, using only days that have already settled:
 and the page's fair value gets a rolling correction (page EV -> what settled).
 
 Backtest (replay of the live model, Dec 2024 - Sep 2026, 7,389 day-reads, prior-only):
-  settle below P10 11.4%, above P90 9.7%  (averaging the hourly percentiles: 3.5% / 14.7%)
+  settle below P10 11.9%, above P90 9.6%  (averaging the hourly percentiles: 3.5% / 14.7%)
 
 Reads : docs/index.html (const D), model/risk_price.npz (written by update.py), cache/stormvista,
         cache/risk_lib.npz (+ new settled days from archive/live), verify/risk_calibration_history.csv,
@@ -104,9 +104,19 @@ def history(today):
                 Lg['win'] = (Lg.settle < Lg.fwd - 2.5).astype(float).where(Lg.fwd.notna())
                 Lg['source'] = 'live'
                 Lg['e50_raw'] = Lg['q50']
-                H = pd.concat([H, Lg[['run', 'day', 'lead', 'mincush', 'settle', 'ev_page', 'pit_raw', 'e50_raw', 'pwin_raw', 'win', 'fwd', 'source']]], ignore_index=True)
+                if 'q_mean' not in Lg: Lg['q_mean'] = np.nan
+                H = pd.concat([H, Lg[['run', 'day', 'lead', 'mincush', 'settle', 'ev_page', 'pit_raw', 'e50_raw', 'q_mean', 'pwin_raw', 'win', 'fwd', 'source']]], ignore_index=True)
         except Exception as e: say(f'WARNING risk log not read ({e})')
     return H[H.day < today]
+
+
+def odds_for(HR, L, mc):
+    # backtested share of days that settled ABOVE each line, for days like this one (same lead group and tightest-hour bucket)
+    if not HR: return None
+    for r in HR['rows']:
+        if r['l0'] <= L <= r['l1'] and r['lo'] < mc <= r['hi']:
+            return dict(n=r['n'], bucket=r['bucket'], lead=r['lead'], asof=HR['asof'], **{k: r[k] for k in r if k.startswith('above_')})
+    return None
 
 
 def iso_table(x, y, lo=None, hi=None):
@@ -167,8 +177,10 @@ def main():
     Udays = list(Ud)
     C = actuals(); LIB, added = library(IX, IY, C, today)
     MEM, run = members(today)
-    H = history(today); H365 = H[H.day >= today - pd.Timedelta(days=365)]
+    H = history(today); H365 = H[H.day >= today - pd.Timedelta(days=365)]; H120 = H[H.day >= today - pd.Timedelta(days=120)]
+    HR = json.loads((HERE / 'model' / 'hit_rates.json').read_text()) if (HERE / 'model' / 'hit_rates.json').exists() else None
     fvx, fvy = iso_table(H365.ev_page.values, H365.settle.values)
+    hm = H365.dropna(subset=['q_mean']); mvx, mvy = iso_table(hm.q_mean.values, hm.settle.values)
     hw = H365.dropna(subset=['pwin_raw', 'win']); pwx, pwy = iso_table(hw.pwin_raw.values, hw.win.values, 0, 1)
     EV = outage_events(today)
     # forecast days on the page
@@ -211,20 +223,25 @@ def main():
         k = np.array([kfac(c) for c in base])
         px = np.clip(np.expm1(np.log1p(curve(XS, YS, true.ravel()).reshape(true.shape)) + res), 0, 999.99) * k[None, :]
         dayp = px.mean(axis=1); qraw = np.quantile(dayp, QL)
-        # rolling range correction: where past settles fell inside past ranges at a similar level
-        # (weighted by closeness of the engine's own raw median; last 365 days). Backtest: 11.4% below P10, 9.7% above P90.
-        # sliding version: past reads weighted by how close their raw level was (no bracket edges)
-        hz = H365.dropna(subset=['pit_raw', 'e50_raw']); z0 = np.log(np.median(dayp) + 5); bw = 0.3
-        for _ in range(6):
-            w = np.exp(-0.5 * ((np.log(hz.e50_raw.values + 5) - z0) / bw) ** 2); neff = w.sum() ** 2 / max((w ** 2).sum(), 1e-12)
+        # rolling range correction: where past settles fell inside past ranges on SIMILAR days -
+        # weighted by closeness of the engine's own raw level AND of the tightest forecast hour (last 120 days only:
+        # a year mixed in old price regimes. Backtest since Sep 2025: below P10/25/50/75/90 = 11/26/51/77/90%, ideal 10/25/50/75/90).
+        hz = H120.dropna(subset=['pit_raw', 'e50_raw', 'mincush']); z0 = np.log(np.median(dayp) + 5); bw = 0.3; bc = 600.0
+        c0 = float(np.clip(base.min(), -1500, 4000)); hc = np.clip(hz.mincush.values.astype(float), -1500, 4000)
+        for _ in range(8):
+            w = np.exp(-0.5 * ((np.log(hz.e50_raw.values + 5) - z0) / bw) ** 2) * np.exp(-0.5 * ((hc - c0) / bc) ** 2)
+            neff = w.sum() ** 2 / max((w ** 2).sum(), 1e-12)
             if neff >= 60: break
-            bw *= 1.5
+            bw *= 1.3; bc *= 1.3
         if len(hz) >= 60:
             o_ = np.argsort(hz.pit_raw.values); cw = np.cumsum(w[o_]); cw = cw / cw[-1]
             lev = np.interp(TAU, cw, hz.pit_raw.values[o_])
         else: lev = TAU
         hh = hz
         Q = np.quantile(dayp, np.clip(lev, 0, 1))
+        # fair value = expected settle = the average of the range shown (kept consistent with P10 / P50 / P90).
+        # Backtest: about +$8 high on ordinary days, about -$5 on tight days (tightest hour <= 200 MW).
+        qm = float(Q.mean()); fv = qm
         evp = float(np.mean([look(c, h_, lb) for c, h_ in zip(base, he)]))
         pg = {q: float(np.mean([look(c, h_, lb, f'q{q}') for c, h_ in zip(base, he)])) for q in (10, 50, 90)}
         f_ = float(fwd.get(day)) if fwd is not None and day in fwd.index else None
@@ -258,13 +275,13 @@ def main():
         fvb = fv_of(base); main = max(swings, key=lambda k: abs(swings[k]['fv_bad'] - swings[k]['fv_good']))
         rec = dict(lead=L, mincush=round(float(base.min())), he=[int(x) for x in he], base=[round(float(x)) for x in base],
                    q=[round(float(x), 2) for x in np.quantile(Q, QL)], p10=round(float(np.quantile(Q, .1)), 2), p50=round(float(np.quantile(Q, .5)), 2),
-                   p90=round(float(np.quantile(Q, .9)), 2), mean=round(float(Q.mean()), 2), ev_page=round(evp, 2),
-                   fv_corr=round(float(np.interp(evp, fvx, fvy)), 2), fv_next=round(fvb, 2),
+                   p90=round(float(np.quantile(Q, .9)), 2), p25=round(float(np.quantile(Q, .25)), 2), p75=round(float(np.quantile(Q, .75)), 2), mean=round(float(Q.mean()), 2), ev_page=round(evp, 2),
+                   fv_corr=round(float(np.interp(evp, fvx, fvy)), 2), fv=round(fv, 2), fv_next=round(fvb, 2),
                    pg10=round(pg[10], 2), pg50=round(pg[50], 2), pg90=round(pg[90], 2), fwd=f_,
                    pwin=None if pwr is None else round(float(np.interp(pwr, pwx, pwy)), 3), pwin_raw=pwr,
-                   swings=swings, main=main, event=evt, nlib=int(len(lib)), ncal=int(len(hh)))
+                   swings=swings, main=main, odds=odds_for(HR, L, float(base.min())), event=evt, nlib=int(len(lib)), ncal=int(len(hh)))
         out[str(day.date())] = rec
-        logrows.append(dict(run=str(today.date()), day=str(day.date()), lead=L, mincush=rec['mincush'], ev_page=rec['ev_page'], fwd=f_, pwin_raw=pwr,
+        logrows.append(dict(run=str(today.date()), day=str(day.date()), lead=L, mincush=rec['mincush'], ev_page=rec['ev_page'], fwd=f_, pwin_raw=pwr, q_mean=round(qm, 3),
                             **{f'q{int(round(x*100)):02d}': round(float(v), 3) for x, v in zip(QL, qraw)}))
     P = dict(built=str(now)[:16], today=str(today.date()), members_run=None if run is None else str(run.date()),
              members_ok=MEM is not None, lib_added=added, ncal=int(len(H365)), pw_x=[round(float(x), 4) for x in pwx], pw_y=[round(float(x), 4) for x in pwy],
@@ -283,7 +300,7 @@ def main():
     say(f"risk engine: {len(out)} days · wind members {P['members_run']} · library +{added} new days · calibration reads {P['ncal']}{warn}")
     for d_, r in out.items():
         pw = '-' if r['pwin'] is None else f"{100 * r['pwin']:.0f}%"
-        say(f"  {d_} d{r['lead']:<2} P10 {r['p10']:7.2f}  P50 {r['p50']:7.2f}  P90 {r['p90']:7.2f}  FV page {r['ev_page']:7.2f} -> corr {r['fv_corr']:7.2f}"
+        say(f"  {d_} d{r['lead']:<2} P10 {r['p10']:7.2f}  P50 {r['p50']:7.2f}  P90 {r['p90']:7.2f}  FV {r['fv']:7.2f} (page {r['ev_page']:7.2f})"
             f"  short wins {pw}  main risk {r['main']}")
 
 
