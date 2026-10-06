@@ -1148,7 +1148,9 @@ function compute(h,s){
 
 const days=[...new Set(D.hours.map(h=>h.dt.slice(0,10)))]
   .filter(d=>D.hours.filter(h=>h.dt.slice(0,10)===d).length>=12);
-let day=days.find(d=>D.hours.some(h=>h.dt.slice(0,10)===d&&h.status==='FORECAST'))||days[days.length-1];
+// open on the first day that still has most of its hours ahead (after midday that is tomorrow)
+let day=days.find(d=>D.hours.filter(h=>h.dt.slice(0,10)===d&&h.status==='FORECAST').length>=12)
+     ||days.find(d=>D.hours.some(h=>h.dt.slice(0,10)===d&&h.status==='FORECAST'))||days[days.length-1];
 
 const fmtDay=d=>new Date(d+'T12:00:00').toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric'});
 const mw=v=>v==null?'—':Math.round(v).toLocaleString('en-CA');
@@ -1581,7 +1583,7 @@ function fundVals(rows,k){
 function drawCards(){
   const host=$('dayCards'), head=$('dcHead'); if(!host) return;
   const C=(D.cards||{})[day];
-  if(!C){ head.textContent=D.cards?'Day read: not shown for settled days.':'Day read unavailable today - see the refresh log.'; host.innerHTML=''; return; }
+  if(!C){ head.textContent=D.cards?'No day read for this day - it has mostly settled. The day read starts with the first day that is still mostly ahead: pick it in the day bar above.':'Day read unavailable today - see the refresh log.'; host.innerHTML=''; return; }
   Q=qLoad(); const qid='D:'+day, qq=Q[qid]||{}, CARDS=addProb(dayRequote(C,qid),day);
   const esc=x=>String(x).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
   head.innerHTML=`<b>Day read</b> · ${fmtDay(day)} · ${C.lead<=0?'today':C.lead+' day'+(C.lead>1?'s':'')+' out'}`;
