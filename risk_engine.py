@@ -10,12 +10,12 @@ For every forecast day it draws 1,000 versions of the day and prices each one:
   price   : the model's 7-day price curve at the drawn cushion x a residual from the pools; the
             residual ranks come from the same past date, so the hours of a day move together
 Then two rolling corrections, using only days that have already settled:
-  range   : where past settles really fell inside past ranges (by the engine's own level) remaps the range
+  range   : where past settles really fell inside past ranges (weighted by how close past days' level was) remaps the range
   odds    : the chance a short wins is mapped through its own track record
 and the page's fair value gets a rolling correction (page EV -> what settled).
 
 Backtest (replay of the live model, Dec 2024 - Sep 2026, 7,389 day-reads, prior-only):
-  settle below P10 12.6%, above P90 10.0%  (averaging the hourly percentiles: 3.5% / 14.7%)
+  settle below P10 11.4%, above P90 9.7%  (averaging the hourly percentiles: 3.5% / 14.7%)
 
 Reads : docs/index.html (const D), model/risk_price.npz (written by update.py), cache/stormvista,
         cache/risk_lib.npz (+ new settled days from archive/live), verify/risk_calibration_history.csv,
@@ -31,7 +31,6 @@ import numpy as np, pandas as pd
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / 'model'))
 from core import E, NB, curve, build_pools
-EDGES = [25, 45, 80, 150]
 N = 1000; TAU = (np.arange(500) + 0.5) / 500; QL = np.arange(1, 100) / 100
 COLS = ['m_solar', 'm_load', 'm_gas', 'm_bio', 'm_nires', 'm_wind']
 LOG = HERE / 'verify' / 'risk_book_log.csv'
@@ -212,11 +211,19 @@ def main():
         k = np.array([kfac(c) for c in base])
         px = np.clip(np.expm1(np.log1p(curve(XS, YS, true.ravel()).reshape(true.shape)) + res), 0, 999.99) * k[None, :]
         dayp = px.mean(axis=1); qraw = np.quantile(dayp, QL)
-        # rolling range correction: where past settles fell inside past ranges of the same level
-        # (bucketed by the engine's own raw median; last 365 days). Backtest: 12.6% below P10, 10.0% above P90.
-        eb = int(np.digitize(np.median(dayp), EDGES))
-        hh = H365[np.digitize(H365.e50_raw.values, EDGES) == eb].pit_raw.dropna()
-        lev = np.quantile(hh.values, TAU) if len(hh) >= 60 else TAU
+        # rolling range correction: where past settles fell inside past ranges at a similar level
+        # (weighted by closeness of the engine's own raw median; last 365 days). Backtest: 11.4% below P10, 9.7% above P90.
+        # sliding version: past reads weighted by how close their raw level was (no bracket edges)
+        hz = H365.dropna(subset=['pit_raw', 'e50_raw']); z0 = np.log(np.median(dayp) + 5); bw = 0.3
+        for _ in range(6):
+            w = np.exp(-0.5 * ((np.log(hz.e50_raw.values + 5) - z0) / bw) ** 2); neff = w.sum() ** 2 / max((w ** 2).sum(), 1e-12)
+            if neff >= 60: break
+            bw *= 1.5
+        if len(hz) >= 60:
+            o_ = np.argsort(hz.pit_raw.values); cw = np.cumsum(w[o_]); cw = cw / cw[-1]
+            lev = np.interp(TAU, cw, hz.pit_raw.values[o_])
+        else: lev = TAU
+        hh = hz
         Q = np.quantile(dayp, np.clip(lev, 0, 1))
         evp = float(np.mean([look(c, h_, lb) for c, h_ in zip(base, he)]))
         pg = {q: float(np.mean([look(c, h_, lb, f'q{q}') for c, h_ in zip(base, he)])) for q in (10, 50, 90)}

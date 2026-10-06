@@ -132,8 +132,10 @@ def build(root, f, comp, grid, say=print):
         for b in j['return']:
             for h in b['Hours']:
                 og = h['outage_grouping']
-                rows.append((pd.Timestamp(h['begin_datetime_mpt']), b['fuel_type'], b['sub_fuel_type'], og.get('MC') or 0, og.get('AC') or 0))
-        X = pd.DataFrame(rows, columns=['t', 'fuel', 'sub', 'mc', 'ac']); X['out'] = X.mc - X.ac; X['day'] = X.t.dt.normalize()
+                rows.append((pd.Timestamp(h['begin_datetime_mpt']), b['fuel_type'], b['sub_fuel_type'], og.get('MC') or 0, og.get('AC') or 0, og.get('MBO OUT') or 0))
+        X = pd.DataFrame(rows, columns=['t', 'fuel', 'sub', 'mc', 'ac', 'mbo'])
+        X['out'] = X.mc - X.ac - X.mbo      # operating outages only; mothballed units (MBO) are shown on their own line
+        X['day'] = X.t.dt.normalize()
         return X
 
     GN = GH = None
@@ -263,7 +265,7 @@ def build(root, f, comp, grid, say=print):
             if GN is not None:
                 gd = GN[(GN.day == day) & (GN.fuel == 'GAS')].groupby('t').out.sum()
                 if len(gd):
-                    gas_out = float(gd.mean()); rows.append(('Gas out (AESO gencap)', f'{gas_out:,.0f} MW'))
+                    gas_out = float(gd.mean()); rows.append(('Gas out - operating outages', f'{gas_out:,.0f} MW'))
                     if GH is not None:
                         h0 = GH[(GH.fuel == 'GAS') & (GH.day == GH.vint)].groupby(['vint', 't']).out.sum().groupby('vint').mean()
                         if len(h0) >= 5: rows.append(('… vs last 30 mornings', f'avg {h0.mean():,.0f} · higher than {int((h0 < gas_out).sum())} of {len(h0)}'))
@@ -273,12 +275,15 @@ def build(root, f, comp, grid, say=print):
                             rows.append((f'Change since the {GH.vint.max():%a %d %b} report', f'{ch:+,.0f} MW out'))
                     sub = GN[(GN.day == day) & (GN.fuel == 'GAS')].groupby(['sub', 't']).out.sum().groupby('sub').mean().sort_values(ascending=False)
                     rows.append(('Most out', ', '.join(f"{k.replace('_', ' ').title()} {v:,.0f}" for k, v in sub.head(2).items())))
+                    mb = GN[(GN.day == day) & (GN.fuel == 'GAS')].groupby('t').mbo.sum()
+                    if len(mb) and mb.mean() > 0:
+                        rows.append(('Mothballed gas (not counted above)', f'{mb.mean():,.0f} MW' + (' - Sundance 6 (401) + Sheerness 1 (~400), economic mothballs' if 790 <= mb.mean() <= 810 else ' - check which units (the mothball total changed)')))
                 hd = GN[(GN.day == day) & (GN['sub'] == 'HYDRO')].groupby('t').out.sum()
                 if len(hd): rows.append(('Hydro out', f'{hd.mean():,.0f} MW'))
             rows.append(('Gas the model uses (corrected outlook)', f'{g.gasv.mean():,.0f} MW average'))
             if 'imp' in g and g.imp.loc[17:20].notna().any():
                 rows.append(('Import capability HE17–20', f'{g.imp.loc[17:20].mean():,.0f} MW · assumed {g.it.loc[17:20].mean():+,.0f}'))
-            card('5 · Supply', rows, 'AESO gencap counts outages it already knows; the model uses the corrected AESO outlook, which runs lower further out.',
+            card('5 · Supply', rows, 'Operating outages AESO already knows about (mothballed units excluded - they are not available and are not expected back soon). The model uses the corrected AESO outlook, which runs lower further out.',
                  'Outage history only goes back to Sep 20, so supply reads are not backtested yet.')
         except Exception as e: card('5 · Supply', [], f'Unavailable today ({type(e).__name__}: {e}).', warn=True)
         # 6 net it, 7 checks
